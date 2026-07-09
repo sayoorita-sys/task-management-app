@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>タスク管理アプリ</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-layout">
+      <main>
+        <h1>タスク管理アプリ</h1>
+
+        <form id="taskForm">
+          <input id="taskInput" type="text" placeholder="タスクを入力" />
+          <input id="dueDateInput" type="date" />
+          <input
+            id="estimatedMinutesInput"
+            type="number"
+            placeholder="予想時間（分）"
+          />
+          <button id="addButton" type="submit">追加</button>
+        </form>
+
+        <p id="errorMessage"></p>
+
+        <ul id="taskList"></ul>
+
+        <h2>振り返り</h2>
+        <canvas id="workTimeChart"></canvas>
+      </main>
+
+      <aside class="stopwatch-panel" id="stopwatchPanel">
+        <p class="stopwatch-label">作業タイマー</p>
+        <h2 id="stopwatchTaskName">停止中</h2>
+        <div class="stopwatch-metric">
+          <span>今回</span>
+          <p class="stopwatch-time" id="stopwatchTime">00:00:00</p>
+        </div>
+        <div class="stopwatch-metric">
+          <span>累計</span>
+          <p class="stopwatch-total-time" id="stopwatchTotalTime">00:00:00</p>
+        </div>
+        <p class="stopwatch-hint" id="stopwatchHint">
+          タスクの開始ボタンで計測します。
+        </p>
+      </aside>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="script.js?v=20260709-5"></script>
+  </body>
+</html>
