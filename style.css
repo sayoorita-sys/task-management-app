@@ -326,6 +326,14 @@ form {
   white-space: nowrap;
 }
 
+.due-date-cell {
+  font-weight: 700;
+}
+
+.due-date-cell.is-past-due {
+  color: #dc2626;
+}
+
 .timer-running {
   color: #047857;
   font-size: 0.9rem;

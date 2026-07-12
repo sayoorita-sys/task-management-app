@@ -128,6 +128,23 @@ function toDateInputValue(date) {
   return `${year}-${month}-${day}`;
 }
 
+function isPastDueDate(dateText) {
+  if (!dateText) {
+    return false;
+  }
+
+  return dateText.slice(0, 10) < toDateInputValue(new Date());
+}
+
+function formatDueDate(dateText) {
+  if (!dateText) {
+    return "締切なし";
+  }
+
+  const [, month, day] = dateText.slice(0, 10).split("-");
+  return `${Number(month)}/${Number(day)}`;
+}
+
 function addDays(date, days) {
   const nextDate = new Date(date);
   nextDate.setDate(nextDate.getDate() + days);
@@ -595,18 +612,20 @@ function createTaskCard(task) {
   const title = document.createElement("h3");
   title.textContent = task.title;
 
-  const tag = document.createElement("span");
-  tag.className = "task-tag";
-  tag.style.backgroundColor = task.tag_color || "#38bdf8";
-  tag.textContent = task.tag_name || "タグなし";
-
   const remainingSubtaskCount = task.subtasks.filter((subtask) => !subtask.is_completed).length;
 
   const metaRow = document.createElement("div");
   metaRow.className = "task-meta-row";
 
   titleArea.appendChild(title);
-  metaRow.appendChild(tag);
+
+  if (task.tag_name) {
+    const tag = document.createElement("span");
+    tag.className = "task-tag";
+    tag.style.backgroundColor = task.tag_color || "#38bdf8";
+    tag.textContent = task.tag_name;
+    metaRow.appendChild(tag);
+  }
 
   if (remainingSubtaskCount > 0) {
     const subtaskBadge = document.createElement("span");
@@ -615,11 +634,14 @@ function createTaskCard(task) {
     metaRow.appendChild(subtaskBadge);
   }
 
-  titleArea.appendChild(metaRow);
+  if (metaRow.children.length > 0) {
+    titleArea.appendChild(metaRow);
+  }
 
   const dueDate = document.createElement("span");
-  dueDate.className = "task-cell";
-  dueDate.textContent = task.due_date ? task.due_date.slice(0, 10) : "締切なし";
+  dueDate.className = "task-cell due-date-cell";
+  dueDate.classList.toggle("is-past-due", isPastDueDate(task.due_date));
+  dueDate.textContent = formatDueDate(task.due_date);
 
   const estimate = document.createElement("span");
   estimate.className = "task-cell";
