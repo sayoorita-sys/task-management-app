@@ -411,6 +411,33 @@ app.patch("/api/tasks/:id", async (req, res) => {
       return;
     }
 
+    if (typeof req.body.folder_name === "string") {
+      const folderName = req.body.folder_name.trim();
+
+      if (!folderName) {
+        res.status(400).json({ error: "移動先フォルダを選択してください。" });
+        return;
+      }
+
+      const folderResult = await pool.query(
+        "SELECT 1 FROM folders WHERE name = $1",
+        [folderName],
+      );
+
+      if (folderResult.rows.length === 0) {
+        res.status(400).json({ error: "存在するフォルダを選択してください。" });
+        return;
+      }
+
+      const result = await pool.query(
+        "UPDATE tasks SET folder_name = $1 WHERE id = $2 RETURNING *",
+        [folderName, req.params.id],
+      );
+
+      res.json(result.rows[0]);
+      return;
+    }
+
     const result = await pool.query(
       `UPDATE tasks
        SET is_completed = $1,

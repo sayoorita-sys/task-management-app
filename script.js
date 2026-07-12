@@ -326,9 +326,11 @@ function setViewMode(mode) {
     selectedTag = null;
     showingHiddenTags = false;
     closeTagContextMenu();
+    closeTaskContextMenu();
     showStatus(`${currentFolder} フォルダを表示しています。`);
   } else {
     closeTagContextMenu();
+    closeTaskContextMenu();
     showStatus("タグごとに表示しています。");
   }
 
@@ -345,8 +347,27 @@ function closeTagContextMenu() {
   }
 }
 
+function closeTaskContextMenu() {
+  const contextMenu = document.querySelector(".task-context-menu");
+
+  if (contextMenu) {
+    contextMenu.remove();
+  }
+}
+
+function positionContextMenu(contextMenu, event) {
+  const menuWidth = contextMenu.offsetWidth;
+  const menuHeight = contextMenu.offsetHeight;
+  const left = Math.min(event.clientX, window.innerWidth - menuWidth - 8);
+  const top = Math.min(event.clientY, window.innerHeight - menuHeight - 8);
+
+  contextMenu.style.left = `${Math.max(8, left)}px`;
+  contextMenu.style.top = `${Math.max(8, top)}px`;
+}
+
 function openTagContextMenu(event, tag) {
   closeTagContextMenu();
+  closeTaskContextMenu();
 
   const contextMenu = document.createElement("div");
   contextMenu.className = "tag-context-menu";
@@ -379,14 +400,65 @@ function openTagContextMenu(event, tag) {
 
   contextMenu.appendChild(hideButton);
   document.body.appendChild(contextMenu);
+  positionContextMenu(contextMenu, event);
+}
 
-  const menuWidth = contextMenu.offsetWidth;
-  const menuHeight = contextMenu.offsetHeight;
-  const left = Math.min(event.clientX, window.innerWidth - menuWidth - 8);
-  const top = Math.min(event.clientY, window.innerHeight - menuHeight - 8);
+function renderFolderMoveChoices(contextMenu, task, event) {
+  contextMenu.innerHTML = "";
 
-  contextMenu.style.left = `${Math.max(8, left)}px`;
-  contextMenu.style.top = `${Math.max(8, top)}px`;
+  const heading = document.createElement("strong");
+  heading.textContent = "移動先フォルダ";
+  contextMenu.appendChild(heading);
+
+  const folderChoiceList = document.createElement("div");
+  folderChoiceList.className = "folder-move-list";
+
+  allFolders.forEach((folder) => {
+    const folderButton = document.createElement("button");
+    folderButton.type = "button";
+    folderButton.textContent = folder.name;
+    folderButton.disabled = folder.name === task.folder_name;
+    folderButton.addEventListener("click", async () => {
+      const response = await fetchWithTimeout(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder_name: folder.name }),
+      });
+
+      if (!response.ok) {
+        showError(await readError(response));
+        return;
+      }
+
+      closeTaskContextMenu();
+      showStatus(`${task.title} を ${folder.name} フォルダへ移動しました。`);
+      await loadTasks();
+    });
+
+    folderChoiceList.appendChild(folderButton);
+  });
+
+  contextMenu.appendChild(folderChoiceList);
+  positionContextMenu(contextMenu, event);
+}
+
+function openTaskContextMenu(event, task) {
+  closeTagContextMenu();
+  closeTaskContextMenu();
+
+  const contextMenu = document.createElement("div");
+  contextMenu.className = "task-context-menu";
+
+  const moveButton = document.createElement("button");
+  moveButton.type = "button";
+  moveButton.textContent = "フォルダの変更";
+  moveButton.addEventListener("click", () => {
+    renderFolderMoveChoices(contextMenu, task, event);
+  });
+
+  contextMenu.appendChild(moveButton);
+  document.body.appendChild(contextMenu);
+  positionContextMenu(contextMenu, event);
 }
 
 function createSubtaskArea(task) {
@@ -479,6 +551,15 @@ function createTaskCard(task) {
     renderTaskLists();
   });
 
+  article.addEventListener("contextmenu", (event) => {
+    if (isInteractiveElement(event.target)) {
+      return;
+    }
+
+    event.preventDefault();
+    openTaskContextMenu(event, task);
+  });
+
   const checkbox = document.createElement("input");
   checkbox.className = "task-checkbox";
   checkbox.type = "checkbox";
@@ -519,8 +600,22 @@ function createTaskCard(task) {
   tag.style.backgroundColor = task.tag_color || "#38bdf8";
   tag.textContent = task.tag_name || "タグなし";
 
+  const remainingSubtaskCount = task.subtasks.filter((subtask) => !subtask.is_completed).length;
+
+  const metaRow = document.createElement("div");
+  metaRow.className = "task-meta-row";
+
   titleArea.appendChild(title);
-  titleArea.appendChild(tag);
+  metaRow.appendChild(tag);
+
+  if (remainingSubtaskCount > 0) {
+    const subtaskBadge = document.createElement("span");
+    subtaskBadge.className = "subtask-count-badge";
+    subtaskBadge.textContent = `未完了サブタスク${remainingSubtaskCount}個`;
+    metaRow.appendChild(subtaskBadge);
+  }
+
+  titleArea.appendChild(metaRow);
 
   const dueDate = document.createElement("span");
   dueDate.className = "task-cell";
@@ -1076,11 +1171,16 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest(".tag-context-menu")) {
     closeTagContextMenu();
   }
+
+  if (!event.target.closest(".task-context-menu")) {
+    closeTaskContextMenu();
+  }
 });
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     closeTagContextMenu();
+    closeTaskContextMenu();
   }
 });
 

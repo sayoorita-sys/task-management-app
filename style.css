@@ -187,7 +187,8 @@ form {
   outline: 2px solid var(--theme-dark);
 }
 
-.tag-context-menu {
+.tag-context-menu,
+.task-context-menu {
   background: white;
   border: 1px solid var(--theme-border);
   border-radius: 8px;
@@ -197,8 +198,26 @@ form {
   z-index: 20;
 }
 
-.tag-context-menu button {
+.tag-context-menu button,
+.task-context-menu button {
   min-width: 88px;
+}
+
+.task-context-menu {
+  display: grid;
+  gap: 8px;
+  min-width: 160px;
+}
+
+.task-context-menu strong {
+  color: #46606f;
+  font-size: 0.85rem;
+  padding: 4px 6px 0;
+}
+
+.folder-move-list {
+  display: grid;
+  gap: 6px;
 }
 
 .hidden-tag-section {
@@ -273,12 +292,32 @@ form {
   overflow-wrap: anywhere;
 }
 
+.task-meta-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .task-tag {
   border-radius: 999px;
   color: white;
-  display: inline-block;
+  display: inline-flex;
   font-size: 0.8rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   padding: 3px 8px;
+}
+
+.subtask-count-badge {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 999px;
+  color: #92400e;
+  display: inline-flex;
+  font-size: 0.78rem;
+  padding: 3px 8px;
+  white-space: nowrap;
 }
 
 .task-cell {
