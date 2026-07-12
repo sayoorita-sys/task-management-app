@@ -21,6 +21,48 @@ body {
   margin: 40px;
 }
 
+.auth-page {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: calc(100vh - 80px);
+}
+
+.auth-panel {
+  background: white;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(16, 32, 51, 0.12);
+  max-width: 760px;
+  padding: 28px;
+  width: min(100%, 760px);
+}
+
+.auth-panel h1 {
+  margin-bottom: 20px;
+}
+
+.auth-forms {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.auth-form {
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+  margin: 0;
+  padding: 18px;
+}
+
+.auth-form h2 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
 button,
 input {
   font: inherit;
@@ -93,6 +135,21 @@ main {
   gap: 20px;
   justify-content: space-between;
   margin-bottom: 24px;
+}
+
+.user-menu {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.user-menu span {
+  color: #46606f;
+  font-size: 0.9rem;
+}
+
+.user-menu button {
+  padding: 8px 10px;
 }
 
 h1 {
@@ -785,13 +842,19 @@ form {
   }
 
   .app-layout,
-  form {
+  form,
+  .auth-forms {
     grid-template-columns: 1fr;
   }
 
   .app-header,
   .report-header,
   .task-section-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .user-menu {
     align-items: stretch;
     flex-direction: column;
   }

@@ -1,4 +1,15 @@
 const taskInput = document.getElementById("taskInput");
+const authPage = document.getElementById("authPage");
+const appLayout = document.getElementById("appLayout");
+const loginForm = document.getElementById("loginForm");
+const loginEmailInput = document.getElementById("loginEmailInput");
+const loginPasswordInput = document.getElementById("loginPasswordInput");
+const registerForm = document.getElementById("registerForm");
+const registerNameInput = document.getElementById("registerNameInput");
+const registerEmailInput = document.getElementById("registerEmailInput");
+const registerPasswordInput = document.getElementById("registerPasswordInput");
+const currentUserLabel = document.getElementById("currentUserLabel");
+const logoutButton = document.getElementById("logoutButton");
 const dueDateInput = document.getElementById("dueDateInput");
 const estimatedMinutesInput = document.getElementById("estimatedMinutesInput");
 const tagNameInput = document.getElementById("tagNameInput");
@@ -72,6 +83,7 @@ const taskSortLabels = {
 let allTasks = [];
 let allTags = [];
 let allFolders = [];
+let currentUser = null;
 let workTimeChart;
 let stopwatchInterval;
 let currentReportRange = "day";
@@ -120,6 +132,55 @@ async function readError(response) {
     const text = await response.text();
     return `サーバーエラー: ${statusText} ${text.replace(/\s+/g, " ").slice(0, 160)}`;
   }
+}
+
+function showAuthPage() {
+  currentUser = null;
+  authPage.classList.remove("hidden");
+  appLayout.classList.add("hidden");
+}
+
+function showAppPage(user) {
+  currentUser = user;
+  currentUserLabel.textContent = `${user.name}でログイン中`;
+  authPage.classList.add("hidden");
+  appLayout.classList.remove("hidden");
+}
+
+function resetLocalData() {
+  allTasks = [];
+  allTags = [];
+  allFolders = [];
+  selectedTag = null;
+  showingHiddenTags = false;
+  expandedTaskId = null;
+  currentFolder = "schedule";
+  currentViewMode = "folder";
+
+  if (workTimeChart) {
+    workTimeChart.destroy();
+    workTimeChart = null;
+  }
+}
+
+async function loadAppData() {
+  await loadFolders();
+  await loadTags();
+  await loadTasks();
+  await loadWorkTimeChart();
+}
+
+async function checkLogin() {
+  const response = await fetchWithTimeout("/api/auth/me");
+
+  if (!response.ok) {
+    showAuthPage();
+    return;
+  }
+
+  const user = await response.json();
+  showAppPage(user);
+  await loadAppData();
 }
 
 function formatElapsedTime(elapsedSeconds) {
@@ -1603,11 +1664,72 @@ confirmResetButton.addEventListener("click", () => {
   resetAllData();
 });
 
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const response = await fetchWithTimeout("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: loginEmailInput.value,
+      password: loginPasswordInput.value,
+    }),
+  });
+
+  if (!response.ok) {
+    showError(await readError(response));
+    return;
+  }
+
+  const user = await response.json();
+  resetLocalData();
+  showAppPage(user);
+  await loadAppData();
+  showStatus("ログインしました。");
+});
+
+registerForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const response = await fetchWithTimeout("/api/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: registerNameInput.value,
+      email: registerEmailInput.value,
+      password: registerPasswordInput.value,
+    }),
+  });
+
+  if (!response.ok) {
+    showError(await readError(response));
+    return;
+  }
+
+  const user = await response.json();
+  resetLocalData();
+  showAppPage(user);
+  await loadAppData();
+  showStatus("登録してログインしました。");
+});
+
+logoutButton.addEventListener("click", async () => {
+  const response = await fetchWithTimeout("/api/auth/logout", {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    showError(await readError(response));
+    return;
+  }
+
+  resetLocalData();
+  showAuthPage();
+  showStatus("ログアウトしました。");
+});
+
 setupThemeButtons();
 setTimerMode(timerMode);
 renderViewMode();
 renderTaskSortButton();
-loadFolders()
-  .then(loadTags)
-  .then(loadTasks)
-  .then(loadWorkTimeChart);
+checkLogin();
