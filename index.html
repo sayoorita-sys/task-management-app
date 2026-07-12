@@ -33,11 +33,7 @@
             </button>
           </div>
           <div class="folder-toolbar" id="folderControls">
-            <label>
-              表示フォルダ
-              <select id="folderSelect"></select>
-            </label>
-            <input id="newFolderInput" type="text" placeholder="新しいフォルダ名" />
+            <div class="folder-list" id="folderList"></div>
             <button id="addFolderButton" type="button">フォルダ追加</button>
           </div>
           <div class="tag-list hidden" id="tagList"></div>
@@ -105,6 +101,12 @@
               </button>
             </div>
           </section>
+          <section class="settings-section danger-section">
+            <h3>データリセット</h3>
+            <button class="danger-button" id="openResetModalButton" type="button">
+              データリセット
+            </button>
+          </section>
         </section>
       </main>
 
@@ -130,8 +132,39 @@
       </aside>
     </div>
     <div class="operation-toast" id="operationToast">準備できました。</div>
+    <div class="modal-backdrop hidden" id="folderModal">
+      <section class="folder-modal" aria-labelledby="folderModalTitle">
+        <button
+          class="modal-close-button"
+          id="closeFolderModalButton"
+          type="button"
+          aria-label="閉じる"
+        >
+          ×
+        </button>
+        <h2 id="folderModalTitle">フォルダ追加</h2>
+        <form class="folder-modal-form" id="folderForm">
+          <input id="newFolderInput" type="text" placeholder="新しいフォルダ名" />
+          <button id="saveFolderButton" type="submit">追加</button>
+        </form>
+      </section>
+    </div>
+    <div class="modal-backdrop hidden" id="resetModal">
+      <section class="folder-modal reset-modal" aria-labelledby="resetModalTitle">
+        <h2 id="resetModalTitle">データリセット</h2>
+        <p>全てのデータが無くなってしまいますが、リセットしますか？</p>
+        <div class="reset-modal-actions">
+          <button class="danger-button" id="confirmResetButton" type="button">
+            リセットする
+          </button>
+          <button class="secondary-button" id="cancelResetButton" type="button">
+            戻る
+          </button>
+        </div>
+      </section>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="script.js?v=20260712-4"></script>
+    <script src="script.js?v=20260712-6"></script>
   </body>
 </html>

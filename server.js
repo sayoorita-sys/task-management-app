@@ -54,6 +54,24 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+app.delete("/api/reset-data", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+    await client.query("TRUNCATE TABLE subtasks, time_logs, tasks, tags, folders RESTART IDENTITY CASCADE");
+    await client.query("INSERT INTO folders (name) VALUES ('tasks')");
+    await client.query("COMMIT");
+
+    res.json({ ok: true });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    handleError(res, error, "データリセットに失敗しました。");
+  } finally {
+    client.release();
+  }
+});
+
 async function setupDatabase() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tasks (

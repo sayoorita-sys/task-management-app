@@ -11,9 +11,13 @@ const completedTaskList = document.getElementById("completedTaskList");
 const folderViewButton = document.getElementById("folderViewButton");
 const tagViewButton = document.getElementById("tagViewButton");
 const folderControls = document.getElementById("folderControls");
-const folderSelect = document.getElementById("folderSelect");
+const folderList = document.getElementById("folderList");
+const folderModal = document.getElementById("folderModal");
+const folderForm = document.getElementById("folderForm");
 const newFolderInput = document.getElementById("newFolderInput");
 const addFolderButton = document.getElementById("addFolderButton");
+const closeFolderModalButton = document.getElementById("closeFolderModalButton");
+const saveFolderButton = document.getElementById("saveFolderButton");
 const tagList = document.getElementById("tagList");
 const operationToast = document.getElementById("operationToast");
 const stopwatchPanel = document.getElementById("stopwatchPanel");
@@ -29,6 +33,10 @@ const previousRangeButton = document.getElementById("previousRangeButton");
 const nextRangeButton = document.getElementById("nextRangeButton");
 const reportRangeLabel = document.getElementById("reportRangeLabel");
 const themeOptions = document.getElementById("themeOptions");
+const openResetModalButton = document.getElementById("openResetModalButton");
+const resetModal = document.getElementById("resetModal");
+const confirmResetButton = document.getElementById("confirmResetButton");
+const cancelResetButton = document.getElementById("cancelResetButton");
 
 const themeColors = [
   { name: "水色", value: "#38bdf8" },
@@ -133,12 +141,17 @@ function addMonths(date, months) {
 }
 
 function applyTheme(color) {
+  const isWhiteTheme = color === "#ffffff";
+
   document.documentElement.style.setProperty("--theme-color", color);
-  document.documentElement.style.setProperty("--theme-dark", color === "#ffffff" ? "#111827" : color);
+  document.documentElement.style.setProperty("--theme-dark", isWhiteTheme ? "#111827" : color);
   document.documentElement.style.setProperty("--theme-soft", `${color}22`);
   document.documentElement.style.setProperty("--theme-bg", `${color}12`);
-  document.documentElement.style.setProperty("--theme-border", color === "#ffffff" ? "#d8dee8" : `${color}88`);
-  document.documentElement.style.setProperty("--theme-card", color === "#ffffff" ? "#ffffff" : `${color}08`);
+  document.documentElement.style.setProperty("--theme-border", isWhiteTheme ? "#d8dee8" : `${color}88`);
+  document.documentElement.style.setProperty("--theme-card", isWhiteTheme ? "#ffffff" : `${color}08`);
+  document.documentElement.style.setProperty("--theme-button-bg", isWhiteTheme ? "#ffffff" : color);
+  document.documentElement.style.setProperty("--theme-button-text", isWhiteTheme ? "#111827" : "#ffffff");
+  document.documentElement.style.setProperty("--theme-button-border", isWhiteTheme ? "#64748b" : "transparent");
   localStorage.setItem("themeColor", color);
 }
 
@@ -249,6 +262,61 @@ function renderViewMode() {
   tagViewButton.classList.toggle("active", !isFolderMode);
   folderControls.classList.toggle("hidden", !isFolderMode);
   tagList.classList.toggle("hidden", isFolderMode);
+}
+
+function openFolderModal() {
+  newFolderInput.value = "";
+  folderModal.classList.remove("hidden");
+  newFolderInput.focus();
+}
+
+function closeFolderModal() {
+  newFolderInput.value = "";
+  folderModal.classList.add("hidden");
+}
+
+function openResetModal() {
+  resetModal.classList.remove("hidden");
+}
+
+function closeResetModal() {
+  resetModal.classList.add("hidden");
+}
+
+async function resetAllData() {
+  confirmResetButton.disabled = true;
+
+  try {
+    const response = await fetchWithTimeout("/api/reset-data", {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      showError(await readError(response));
+      return;
+    }
+
+    allTasks = [];
+    allTags = [];
+    allFolders = [];
+    currentFolder = "schedule";
+    currentViewMode = "folder";
+    selectedTag = null;
+    showingHiddenTags = false;
+    expandedTaskId = null;
+
+    closeResetModal();
+    await loadFolders();
+    await loadTags();
+    await loadTasks();
+    await loadWorkTimeChart();
+    renderViewMode();
+    showStatus("全てのデータをリセットしました。");
+  } catch {
+    showError("サーバーに接続できません。データリセットに失敗しました。");
+  } finally {
+    confirmResetButton.disabled = false;
+  }
 }
 
 function setViewMode(mode) {
@@ -605,15 +673,27 @@ function renderFolders() {
     ...allFolders.map((folder) => ({ name: folder.name, label: folder.name })),
   ];
 
-  folderSelect.innerHTML = "";
+  folderList.innerHTML = "";
   taskFolderInput.innerHTML = "";
 
   options.forEach((folder) => {
-    const option = document.createElement("option");
-    option.value = folder.name;
-    option.textContent = folder.label;
-    option.selected = folder.name === currentFolder;
-    folderSelect.appendChild(option);
+    const button = document.createElement("button");
+    button.className = "folder-button";
+    button.type = "button";
+    button.textContent = folder.label;
+    button.classList.toggle("active", folder.name === currentFolder);
+    button.addEventListener("click", () => {
+      currentFolder = folder.name;
+      currentViewMode = "folder";
+      selectedTag = null;
+      showingHiddenTags = false;
+      renderViewMode();
+      renderFolders();
+      showStatus(`${currentFolder} フォルダを表示しています。`);
+      renderTaskLists();
+    });
+
+    folderList.appendChild(button);
 
     if (folder.name !== "schedule") {
       const taskOption = document.createElement("option");
@@ -623,7 +703,11 @@ function renderFolders() {
     }
   });
 
-  if (!taskFolderInput.value) {
+  const taskTargetFolder = currentFolder !== "schedule" ? currentFolder : "tasks";
+
+  if ([...taskFolderInput.options].some((option) => option.value === taskTargetFolder)) {
+    taskFolderInput.value = taskTargetFolder;
+  } else if (!taskFolderInput.value) {
     taskFolderInput.value = "tasks";
   }
 }
@@ -936,17 +1020,17 @@ nextRangeButton.addEventListener("click", () => {
   loadWorkTimeChart();
 });
 
-folderSelect.addEventListener("change", () => {
-  currentFolder = folderSelect.value;
-  currentViewMode = "folder";
-  selectedTag = null;
-  showingHiddenTags = false;
-  renderViewMode();
-  showStatus(`${currentFolder} フォルダを表示しています。`);
-  renderTaskLists();
+addFolderButton.addEventListener("click", () => {
+  openFolderModal();
 });
 
-addFolderButton.addEventListener("click", async () => {
+closeFolderModalButton.addEventListener("click", () => {
+  closeFolderModal();
+});
+
+folderForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
   const folderName = newFolderInput.value.trim();
 
   if (!folderName) {
@@ -954,22 +1038,30 @@ addFolderButton.addEventListener("click", async () => {
     return;
   }
 
-  const response = await fetchWithTimeout("/api/folders", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: folderName }),
-  });
+  saveFolderButton.disabled = true;
 
-  if (!response.ok) {
-    showError(await readError(response));
-    return;
+  try {
+    const response = await fetchWithTimeout("/api/folders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: folderName }),
+    });
+
+    if (!response.ok) {
+      showError(await readError(response));
+      return;
+    }
+
+    closeFolderModal();
+    currentFolder = folderName;
+    await loadFolders();
+    renderTaskLists();
+    showStatus("フォルダを追加しました。");
+  } catch {
+    showError("サーバーに接続できません。フォルダを追加できませんでした。");
+  } finally {
+    saveFolderButton.disabled = false;
   }
-
-  newFolderInput.value = "";
-  currentFolder = folderName;
-  await loadFolders();
-  renderTaskLists();
-  showStatus("フォルダを追加しました。");
 });
 
 folderViewButton.addEventListener("click", () => {
@@ -1005,6 +1097,18 @@ document.querySelectorAll(".timer-mode-button").forEach((button) => {
     setTimerMode(button.dataset.mode);
     showStatus(`タイマー表示を${button.textContent}に変更しました。`);
   });
+});
+
+openResetModalButton.addEventListener("click", () => {
+  openResetModal();
+});
+
+cancelResetButton.addEventListener("click", () => {
+  closeResetModal();
+});
+
+confirmResetButton.addEventListener("click", () => {
+  resetAllData();
 });
 
 setupThemeButtons();
