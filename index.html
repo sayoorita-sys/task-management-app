@@ -2,31 +2,110 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <title>タスク管理アプリ</title>
+    <title>タスク管理</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div class="app-layout">
       <main>
-        <h1>タスク管理アプリ</h1>
+        <header class="app-header">
+          <h1>タスク管理</h1>
+          <nav class="page-tabs">
+            <button class="tab-button active" type="button" data-page="mainPage">
+              メイン
+            </button>
+            <button class="tab-button" type="button" data-page="reportPage">
+              振り返り
+            </button>
+            <button class="tab-button" type="button" data-page="settingsPage">
+              設定
+            </button>
+          </nav>
+        </header>
 
-        <form id="taskForm">
-          <input id="taskInput" type="text" placeholder="タスクを入力" />
-          <input id="dueDateInput" type="date" />
-          <input
-            id="estimatedMinutesInput"
-            type="number"
-            placeholder="予想時間（分）"
-          />
-          <button id="addButton" type="submit">追加</button>
-        </form>
+        <section class="page active" id="mainPage">
+          <div class="view-mode-buttons">
+            <button class="view-mode-button active" id="folderViewButton" type="button">
+              フォルダごとに表示
+            </button>
+            <button class="view-mode-button" id="tagViewButton" type="button">
+              タグごとに表示
+            </button>
+          </div>
+          <div class="folder-toolbar" id="folderControls">
+            <label>
+              表示フォルダ
+              <select id="folderSelect"></select>
+            </label>
+            <input id="newFolderInput" type="text" placeholder="新しいフォルダ名" />
+            <button id="addFolderButton" type="button">フォルダ追加</button>
+          </div>
+          <div class="tag-list hidden" id="tagList"></div>
 
-        <p id="errorMessage"></p>
+          <form id="taskForm">
+            <input id="taskInput" type="text" placeholder="タスクを入力" />
+            <input id="dueDateInput" type="date" />
+            <input
+              id="estimatedMinutesInput"
+              type="number"
+              placeholder="予想時間（分）"
+            />
+            <input id="tagNameInput" type="text" placeholder="タグ（教科・プロジェクト）" />
+            <input id="tagColorInput" type="color" value="#38bdf8" title="タグの色" />
+            <select id="taskFolderInput"></select>
+            <button id="addButton" type="submit">追加</button>
+          </form>
 
-        <ul id="taskList"></ul>
+          <section class="task-section">
+            <h2>タスクリスト</h2>
+            <div class="task-list" id="taskList"></div>
+          </section>
 
-        <h2>振り返り</h2>
-        <canvas id="workTimeChart"></canvas>
+          <section class="task-section">
+            <h2>完了タスク</h2>
+            <div class="task-list completed-list" id="completedTaskList"></div>
+          </section>
+        </section>
+
+        <section class="page" id="reportPage">
+          <div class="report-header">
+            <h2>振り返り</h2>
+            <button class="arrow-button" id="previousRangeButton" type="button">←</button>
+            <strong id="reportRangeLabel"></strong>
+            <button class="arrow-button" id="nextRangeButton" type="button">→</button>
+            <div class="range-buttons">
+              <button class="range-button active" type="button" data-range="day">
+                day
+              </button>
+              <button class="range-button" type="button" data-range="week">
+                week
+              </button>
+              <button class="range-button" type="button" data-range="month">
+                month
+              </button>
+            </div>
+          </div>
+          <canvas id="workTimeChart"></canvas>
+        </section>
+
+        <section class="page" id="settingsPage">
+          <h2>設定</h2>
+          <section class="settings-section">
+            <h3>テーマカラー</h3>
+            <div class="theme-options" id="themeOptions"></div>
+          </section>
+          <section class="settings-section">
+            <h3>タイマー表示</h3>
+            <div class="timer-mode-buttons">
+              <button class="timer-mode-button active" type="button" data-mode="digital">
+                デジタル
+              </button>
+              <button class="timer-mode-button" type="button" data-mode="analog">
+                アナログ
+              </button>
+            </div>
+          </section>
+        </section>
       </main>
 
       <aside class="stopwatch-panel" id="stopwatchPanel">
@@ -35,6 +114,11 @@
         <div class="stopwatch-metric">
           <span>今回</span>
           <p class="stopwatch-time" id="stopwatchTime">00:00:00</p>
+        </div>
+        <div class="analog-clock hidden" id="analogClock">
+          <div class="analog-hand hour-hand" id="hourHand"></div>
+          <div class="analog-hand minute-hand" id="minuteHand"></div>
+          <div class="analog-hand second-hand" id="secondHand"></div>
         </div>
         <div class="stopwatch-metric">
           <span>累計</span>
@@ -45,8 +129,9 @@
         </p>
       </aside>
     </div>
+    <div class="operation-toast" id="operationToast">準備できました。</div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="script.js?v=20260709-5"></script>
+    <script src="script.js?v=20260712-4"></script>
   </body>
 </html>

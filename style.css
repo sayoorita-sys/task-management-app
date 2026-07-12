@@ -1,76 +1,315 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --theme-color: #38bdf8;
+  --theme-dark: #036985;
+  --theme-soft: #e0f7ff;
+  --theme-bg: #38bdf812;
+  --theme-border: #38bdf888;
+  --theme-card: #38bdf808;
+}
+
 body {
+  background: var(--theme-bg);
+  color: #102033;
   font-family: sans-serif;
   margin: 40px;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  align-items: center;
+  background: var(--theme-color);
+  border: 0;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  line-height: 1;
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+
+button:disabled {
+  background: #b9c8d2;
+  cursor: not-allowed;
+}
+
+input {
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+select {
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  font: inherit;
+  padding: 10px;
+}
+
+input[type="color"] {
+  height: 42px;
+  padding: 4px;
+  width: 56px;
 }
 
 .app-layout {
   display: grid;
   gap: 32px;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  max-width: 1100px;
+  grid-template-columns: minmax(0, 880px) 300px;
   margin: 0 auto;
+  max-width: 1212px;
 }
 
 main {
   min-width: 0;
 }
 
-input {
-  padding: 8px;
-  margin-bottom: 8px;
-}
-
-button {
-  padding: 8px 12px;
-  margin-left: 4px;
-}
-
-li {
-  margin-top: 8px;
-}
-
-form {
+.app-header {
+  align-items: center;
   display: flex;
-  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+h1 {
+  margin: 0;
+}
+
+.page-tabs,
+.range-buttons,
+.view-mode-buttons {
+  display: flex;
   gap: 8px;
 }
 
-.task-item {
+.tab-button,
+.range-button,
+.view-mode-button {
+  background: white;
+  border: 1px solid var(--theme-border);
+  color: var(--theme-dark);
+}
+
+.tab-button.active,
+.range-button.active,
+.view-mode-button.active {
+  background: var(--theme-color);
+  color: white;
+}
+
+.page {
+  display: none;
+}
+
+.page.active {
+  display: block;
+}
+
+form {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(160px, 1.4fr) 140px 130px minmax(150px, 1fr) 56px 120px auto;
+  margin-bottom: 24px;
+}
+
+.folder-toolbar {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.view-mode-buttons {
+  margin-bottom: 14px;
+}
+
+.folder-toolbar label {
+  color: #46606f;
+  display: grid;
+  gap: 4px;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tag-list button.active {
+  box-shadow: 0 0 0 3px var(--theme-soft);
+  outline: 2px solid var(--theme-dark);
+}
+
+.tag-context-menu {
+  background: white;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(16, 32, 51, 0.16);
+  padding: 6px;
+  position: fixed;
+  z-index: 20;
+}
+
+.tag-context-menu button {
+  min-width: 88px;
+}
+
+.hidden-tag-section {
+  align-items: center;
+  border-left: 3px solid var(--theme-border);
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding-left: 12px;
+}
+
+.hidden-tag-row {
+  align-items: center;
+  background: white;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  display: inline-flex;
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.task-section {
+  margin-top: 28px;
+}
+
+.task-section h2,
+.report-header h2 {
+  margin: 0 0 12px;
+}
+
+.task-list {
+  display: grid;
+  gap: 12px;
+}
+
+.task-card {
+  align-items: center;
+  background: white;
+  border: 1px solid var(--theme-border);
+  border-left: 8px solid #38bdf8;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 28px minmax(130px, 1fr) 92px 72px 88px 64px 64px 64px 86px;
+  min-height: 76px;
+  padding: 14px;
+}
+
+.task-card.completed {
+  background: var(--theme-card);
+  color: #8a98a3;
+}
+
+.task-checkbox {
+  height: 18px;
+  width: 18px;
+}
+
+.task-title-area {
+  min-width: 0;
+}
+
+.task-title-area h3 {
+  font-size: 1rem;
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.task-tag {
+  border-radius: 999px;
+  color: white;
+  display: inline-block;
+  font-size: 0.8rem;
+  padding: 3px 8px;
+}
+
+.task-cell {
+  color: #46606f;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.timer-running {
+  color: #047857;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.subtask-area {
+  background: var(--theme-card);
+  border-top: 1px solid var(--theme-border);
+  display: grid;
+  gap: 8px;
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding-top: 12px;
+}
+
+.subtask-row {
   align-items: center;
   display: flex;
   gap: 8px;
 }
 
-.task-item small {
-  color: #666;
-}
-
-.task-item.completed {
-  color: #999;
-  text-decoration: line-through;
-}
-
-.timer-running {
-  color: #0b7a3b;
-  font-size: 0.9rem;
+.subtask-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 0;
 }
 
 .timer-stopped {
   display: none;
 }
 
-#errorMessage {
-  color: #c00040;
+.hide-button {
+  background: #64748b;
+  min-width: 72px;
 }
 
 .empty-message {
-  color: #777;
-  list-style: none;
+  background: white;
+  border: 1px dashed var(--theme-border);
+  border-radius: 8px;
+  color: #60717c;
+  margin: 0;
+  padding: 18px;
+}
+
+.report-header {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 16px;
 }
 
 .stopwatch-panel {
   align-self: start;
-  border: 1px solid #d0d0d0;
+  background: white;
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
   padding: 20px;
   position: sticky;
@@ -79,7 +318,7 @@ form {
 
 .stopwatch-label,
 .stopwatch-hint {
-  color: #666;
+  color: #60717c;
   margin: 0;
 }
 
@@ -93,7 +332,7 @@ form {
 }
 
 .stopwatch-metric span {
-  color: #666;
+  color: #60717c;
   display: block;
   font-size: 0.9rem;
 }
@@ -111,21 +350,127 @@ form {
 }
 
 .stopwatch-panel.is-running {
-  border-color: #0b7a3b;
+  border-color: var(--theme-color);
 }
 
 .stopwatch-panel.is-running .stopwatch-time,
 .stopwatch-panel.is-running .stopwatch-total-time {
-  color: #0b7a3b;
+  color: var(--theme-dark);
 }
 
-@media (max-width: 800px) {
+.analog-clock {
+  border: 4px solid var(--theme-border);
+  border-radius: 999px;
+  height: 170px;
+  margin: 16px auto;
+  position: relative;
+  width: 170px;
+}
+
+.analog-clock::after {
+  background: var(--theme-dark);
+  border-radius: 999px;
+  content: "";
+  height: 10px;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+}
+
+.analog-hand {
+  background: #102033;
+  bottom: 50%;
+  left: 50%;
+  position: absolute;
+  transform-origin: bottom center;
+}
+
+.hour-hand {
+  height: 46px;
+  width: 5px;
+}
+
+.minute-hand {
+  height: 62px;
+  width: 4px;
+}
+
+.second-hand {
+  background: var(--theme-color);
+  height: 70px;
+  width: 2px;
+}
+
+.operation-toast {
+  background: var(--theme-soft);
+  border: 2px solid var(--theme-color);
+  border-radius: 8px;
+  bottom: 20px;
+  color: #075985;
+  max-width: 360px;
+  padding: 14px 16px;
+  position: fixed;
+  right: 20px;
+  z-index: 10;
+}
+
+.operation-toast.error {
+  background: #fff1f2;
+  border-color: #fb7185;
+  color: #be123c;
+}
+
+.settings-section {
+  background: white;
+  border: 1px solid #d8ebf4;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  padding: 18px;
+}
+
+.theme-options,
+.timer-mode-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.theme-button {
+  border: 2px solid transparent;
+}
+
+.theme-button.active,
+.timer-mode-button.active {
+  border-color: #102033;
+}
+
+@media (max-width: 980px) {
   body {
     margin: 24px;
   }
 
-  .app-layout {
+  .app-layout,
+  form {
     grid-template-columns: 1fr;
+  }
+
+  .app-header,
+  .report-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .task-card {
+    align-items: start;
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .task-cell,
+  .timer-running,
+  .task-card button {
+    grid-column: 2;
   }
 
   .stopwatch-panel {
