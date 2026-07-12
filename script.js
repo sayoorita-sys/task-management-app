@@ -6,6 +6,8 @@ const tagColorInput = document.getElementById("tagColorInput");
 const taskFolderInput = document.getElementById("taskFolderInput");
 const addButton = document.getElementById("addButton");
 const taskForm = document.getElementById("taskForm");
+const taskSortButton = document.getElementById("taskSortButton");
+const taskSortOptions = document.getElementById("taskSortOptions");
 const taskList = document.getElementById("taskList");
 const completedTaskList = document.getElementById("completedTaskList");
 const folderViewButton = document.getElementById("folderViewButton");
@@ -32,6 +34,14 @@ const secondHand = document.getElementById("secondHand");
 const previousRangeButton = document.getElementById("previousRangeButton");
 const nextRangeButton = document.getElementById("nextRangeButton");
 const reportRangeLabel = document.getElementById("reportRangeLabel");
+const previousCalendarMonthButton = document.getElementById("previousCalendarMonthButton");
+const nextCalendarMonthButton = document.getElementById("nextCalendarMonthButton");
+const calendarMonthLabel = document.getElementById("calendarMonthLabel");
+const dueDateCalendar = document.getElementById("dueDateCalendar");
+const openGoogleCalendarModalButton = document.getElementById("openGoogleCalendarModalButton");
+const googleCalendarModal = document.getElementById("googleCalendarModal");
+const closeGoogleCalendarModalButton = document.getElementById("closeGoogleCalendarModalButton");
+const googleCalendarTaskList = document.getElementById("googleCalendarTaskList");
 const themeOptions = document.getElementById("themeOptions");
 const openResetModalButton = document.getElementById("openResetModalButton");
 const resetModal = document.getElementById("resetModal");
@@ -52,6 +62,13 @@ const themeColors = [
   { name: "オレンジ", value: "#f97316" },
 ];
 
+const taskSortLabels = {
+  "due-asc": "締切日が早い順",
+  "due-desc": "締切日が遅い順",
+  "title-asc": "50音順",
+  custom: "カスタム",
+};
+
 let allTasks = [];
 let allTags = [];
 let allFolders = [];
@@ -59,8 +76,10 @@ let workTimeChart;
 let stopwatchInterval;
 let currentReportRange = "day";
 let currentReportDate = new Date();
+let currentCalendarDate = new Date();
 let currentFolder = "schedule";
 let currentViewMode = "folder";
+let currentTaskSort = "due-asc";
 let selectedTag = null;
 let showingHiddenTags = false;
 let expandedTaskId = null;
@@ -145,6 +164,57 @@ function formatDueDate(dateText) {
   return `${Number(month)}/${Number(day)}`;
 }
 
+function toDateTimeLocalValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function getDefaultScheduleTime(task) {
+  const defaultDate = task.due_date ? new Date(`${task.due_date.slice(0, 10)}T09:00`) : new Date();
+
+  if (!task.due_date) {
+    defaultDate.setMinutes(0, 0, 0);
+    defaultDate.setHours(defaultDate.getHours() + 1);
+  }
+
+  return toDateTimeLocalValue(defaultDate);
+}
+
+function formatGoogleCalendarDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+
+  return `${year}${month}${day}T${hours}${minutes}${seconds}`;
+}
+
+function createGoogleCalendarUrl(task, startValue) {
+  const startDate = new Date(startValue);
+  const durationMinutes = Number(task.estimated_minutes || 60);
+  const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000);
+  const details = [
+    task.due_date ? `締切: ${task.due_date.slice(0, 10)}` : "",
+    task.tag_name ? `タグ: ${task.tag_name}` : "",
+    task.folder_name ? `フォルダ: ${task.folder_name}` : "",
+  ].filter(Boolean).join("\n");
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: task.title,
+    dates: `${formatGoogleCalendarDate(startDate)}/${formatGoogleCalendarDate(endDate)}`,
+    details,
+  });
+
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
 function addDays(date, days) {
   const nextDate = new Date(date);
   nextDate.setDate(nextDate.getDate() + days);
@@ -155,6 +225,10 @@ function addMonths(date, months) {
   const nextDate = new Date(date);
   nextDate.setMonth(nextDate.getMonth() + months);
   return nextDate;
+}
+
+function getMonthLabel(date) {
+  return `${date.getFullYear()}年${date.getMonth() + 1}月`;
 }
 
 function applyTheme(color) {
@@ -300,6 +374,15 @@ function closeResetModal() {
   resetModal.classList.add("hidden");
 }
 
+function openGoogleCalendarModal() {
+  renderCalendarTasks();
+  googleCalendarModal.classList.remove("hidden");
+}
+
+function closeGoogleCalendarModal() {
+  googleCalendarModal.classList.add("hidden");
+}
+
 async function resetAllData() {
   confirmResetButton.disabled = true;
 
@@ -370,6 +453,18 @@ function closeTaskContextMenu() {
   if (contextMenu) {
     contextMenu.remove();
   }
+}
+
+function closeTaskSortOptions() {
+  taskSortOptions.classList.add("hidden");
+}
+
+function renderTaskSortButton() {
+  taskSortButton.textContent = `並び替え: ${taskSortLabels[currentTaskSort]}`;
+
+  document.querySelectorAll("#taskSortOptions button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.sort === currentTaskSort);
+  });
 }
 
 function positionContextMenu(contextMenu, event) {
@@ -554,7 +649,32 @@ function createSubtaskArea(task) {
   return subtaskArea;
 }
 
-function createTaskCard(task) {
+function createCustomSortControls(task, customSortContext) {
+  const controls = document.createElement("div");
+  controls.className = "custom-sort-controls";
+
+  const upButton = document.createElement("button");
+  upButton.type = "button";
+  upButton.textContent = "↑";
+  upButton.disabled = customSortContext.index === 0;
+  upButton.addEventListener("click", () => {
+    moveTaskInCustomOrder(task.id, -1, task.is_completed);
+  });
+
+  const downButton = document.createElement("button");
+  downButton.type = "button";
+  downButton.textContent = "↓";
+  downButton.disabled = customSortContext.index === customSortContext.total - 1;
+  downButton.addEventListener("click", () => {
+    moveTaskInCustomOrder(task.id, 1, task.is_completed);
+  });
+
+  controls.appendChild(upButton);
+  controls.appendChild(downButton);
+  return controls;
+}
+
+function createTaskCard(task, customSortContext = null) {
   const article = document.createElement("article");
   article.className = task.is_completed ? "task-card completed" : "task-card";
   article.style.borderLeftColor = task.tag_color || "#38bdf8";
@@ -728,7 +848,55 @@ function createTaskCard(task) {
     article.appendChild(createSubtaskArea(task));
   }
 
+  if (currentTaskSort === "custom" && customSortContext) {
+    titleArea.appendChild(createCustomSortControls(task, customSortContext));
+  }
+
   return article;
+}
+
+function compareTaskTitles(a, b) {
+  return a.title.localeCompare(b.title, "ja");
+}
+
+function compareTaskDueDates(a, b, direction) {
+  const aDueDate = a.due_date ? a.due_date.slice(0, 10) : null;
+  const bDueDate = b.due_date ? b.due_date.slice(0, 10) : null;
+
+  if (!aDueDate && !bDueDate) {
+    return compareTaskTitles(a, b);
+  }
+
+  if (!aDueDate) {
+    return 1;
+  }
+
+  if (!bDueDate) {
+    return -1;
+  }
+
+  const result = aDueDate.localeCompare(bDueDate);
+  return result === 0 ? compareTaskTitles(a, b) : result * direction;
+}
+
+function sortTasks(tasks) {
+  return [...tasks].sort((a, b) => {
+    if (currentTaskSort === "custom") {
+      const aOrder = Number(a.custom_order || a.id);
+      const bOrder = Number(b.custom_order || b.id);
+      return aOrder === bOrder ? compareTaskTitles(a, b) : aOrder - bOrder;
+    }
+
+    if (currentTaskSort === "due-desc") {
+      return compareTaskDueDates(a, b, -1);
+    }
+
+    if (currentTaskSort === "title-asc") {
+      return compareTaskTitles(a, b);
+    }
+
+    return compareTaskDueDates(a, b, 1);
+  });
 }
 
 function getVisibleTasks() {
@@ -751,36 +919,195 @@ function getVisibleTasks() {
   }
 
   if (currentFolder === "schedule") {
-    return allTasks
-      .filter((task) => task.due_date && !task.is_hidden)
-      .sort((a, b) => a.due_date.localeCompare(b.due_date));
+    return allTasks.filter((task) => task.due_date && !task.is_hidden);
   }
 
   return allTasks.filter((task) => task.folder_name === currentFolder && !task.is_hidden);
 }
 
+async function saveCustomTaskOrder(tasks) {
+  const response = await fetchWithTimeout("/api/tasks/reorder", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids: tasks.map((task) => task.id) }),
+  });
+
+  if (!response.ok) {
+    showError(await readError(response));
+    return false;
+  }
+
+  return true;
+}
+
+async function moveTaskInCustomOrder(taskId, direction, isCompleted) {
+  const visibleTasks = getVisibleTasks();
+  const orderedTasks = sortTasks(
+    visibleTasks.filter((task) => task.is_completed === isCompleted),
+  );
+  const currentIndex = orderedTasks.findIndex((task) => task.id === taskId);
+  const nextIndex = currentIndex + direction;
+
+  if (currentIndex < 0 || nextIndex < 0 || nextIndex >= orderedTasks.length) {
+    return;
+  }
+
+  const nextTasks = [...orderedTasks];
+  [nextTasks[currentIndex], nextTasks[nextIndex]] = [nextTasks[nextIndex], nextTasks[currentIndex]];
+
+  if (await saveCustomTaskOrder(nextTasks)) {
+    showStatus("カスタム順を保存しました。");
+    await loadTasks();
+  }
+}
+
 function renderTaskLists() {
   const visibleTasks = getVisibleTasks();
-  const activeTasks = visibleTasks.filter((task) => !task.is_completed);
-  const completedTasks = visibleTasks.filter((task) => task.is_completed);
+  const activeTasks = sortTasks(visibleTasks.filter((task) => !task.is_completed));
+  const completedTasks = sortTasks(visibleTasks.filter((task) => task.is_completed));
 
   taskList.innerHTML = "";
   completedTaskList.innerHTML = "";
 
-  activeTasks.forEach((task) => {
-    taskList.appendChild(createTaskCard(task));
+  activeTasks.forEach((task, index) => {
+    taskList.appendChild(createTaskCard(task, {
+      index,
+      total: activeTasks.length,
+    }));
   });
 
   if (activeTasks.length === 0) {
     taskList.appendChild(createEmptyMessage("未完了タスクはありません。"));
   }
 
-  completedTasks.forEach((task) => {
-    completedTaskList.appendChild(createTaskCard(task));
+  completedTasks.forEach((task, index) => {
+    completedTaskList.appendChild(createTaskCard(task, {
+      index,
+      total: completedTasks.length,
+    }));
   });
 
   if (completedTasks.length === 0) {
     completedTaskList.appendChild(createEmptyMessage("表示中の完了タスクはありません。"));
+  }
+}
+
+function createCalendarTaskCard(task) {
+  const article = document.createElement("article");
+  article.className = "calendar-task-card";
+
+  const title = document.createElement("h3");
+  title.textContent = task.title;
+
+  const meta = document.createElement("p");
+  meta.textContent = `${formatDueDate(task.due_date)} / ${
+    task.estimated_minutes ? `${task.estimated_minutes}分` : "60分"
+  }`;
+
+  const scheduleInput = document.createElement("input");
+  scheduleInput.type = "datetime-local";
+  scheduleInput.value = getDefaultScheduleTime(task);
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "このタスクを登録";
+  button.addEventListener("click", () => {
+    if (!scheduleInput.value) {
+      showError("作業開始日時を選択してください。");
+      return;
+    }
+
+    window.open(createGoogleCalendarUrl(task, scheduleInput.value), "_blank", "noopener");
+    closeGoogleCalendarModal();
+    showStatus("Googleカレンダーの予定作成画面を開きました。");
+  });
+
+  article.appendChild(title);
+  article.appendChild(meta);
+  article.appendChild(scheduleInput);
+  article.appendChild(button);
+
+  return article;
+}
+
+function renderDueDateCalendar() {
+  const year = currentCalendarDate.getFullYear();
+  const month = currentCalendarDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const calendarStart = addDays(firstDay, -firstDay.getDay());
+  const today = toDateInputValue(new Date());
+  const tasksByDueDate = allTasks
+    .filter((task) => task.due_date && !task.is_hidden)
+    .reduce((groups, task) => {
+      const dueDate = task.due_date.slice(0, 10);
+
+      if (!groups[dueDate]) {
+        groups[dueDate] = [];
+      }
+
+      groups[dueDate].push(task);
+      return groups;
+    }, {});
+
+  calendarMonthLabel.textContent = getMonthLabel(currentCalendarDate);
+  dueDateCalendar.innerHTML = "";
+
+  ["日", "月", "火", "水", "木", "金", "土"].forEach((weekday) => {
+    const weekdayCell = document.createElement("div");
+    weekdayCell.className = "calendar-weekday";
+    weekdayCell.textContent = weekday;
+    dueDateCalendar.appendChild(weekdayCell);
+  });
+
+  for (let index = 0; index < 42; index += 1) {
+    const cellDate = addDays(calendarStart, index);
+    const dateKey = toDateInputValue(cellDate);
+    const dayTasks = tasksByDueDate[dateKey] || [];
+    const cell = document.createElement("div");
+    cell.className = "calendar-day";
+    cell.classList.toggle("outside-month", cellDate.getMonth() !== month);
+    cell.classList.toggle("today", dateKey === today);
+
+    const dayNumber = document.createElement("strong");
+    dayNumber.textContent = cellDate.getDate();
+    cell.appendChild(dayNumber);
+
+    dayTasks.forEach((task) => {
+      const taskLabel = document.createElement("span");
+      taskLabel.className = task.is_completed ? "calendar-due-task completed" : "calendar-due-task";
+      taskLabel.textContent = task.title;
+      taskLabel.style.borderLeftColor = task.tag_color || "#38bdf8";
+      cell.appendChild(taskLabel);
+    });
+
+    dueDateCalendar.appendChild(cell);
+  }
+}
+
+function renderCalendarTasks() {
+  const calendarTasks = allTasks
+    .filter((task) => !task.is_completed && !task.is_hidden)
+    .sort((a, b) => {
+      if (!a.due_date) {
+        return 1;
+      }
+
+      if (!b.due_date) {
+        return -1;
+      }
+
+      return a.due_date.localeCompare(b.due_date);
+  });
+
+  googleCalendarTaskList.innerHTML = "";
+
+  calendarTasks.forEach((task) => {
+    googleCalendarTaskList.appendChild(createCalendarTaskCard(task));
+  });
+
+  if (calendarTasks.length === 0) {
+    googleCalendarTaskList.appendChild(createEmptyMessage("カレンダーに追加できる未完了タスクはありません。"));
   }
 }
 
@@ -990,6 +1317,8 @@ async function loadTasks() {
   allTasks = await response.json();
   renderStopwatch(allTasks);
   renderTaskLists();
+  renderDueDateCalendar();
+  renderCalendarTasks();
 }
 
 taskForm.addEventListener("submit", async (event) => {
@@ -1108,6 +1437,11 @@ document.querySelectorAll(".tab-button").forEach((button) => {
     if (button.dataset.page === "reportPage") {
       loadWorkTimeChart();
     }
+
+    if (button.dataset.page === "calendarPage") {
+      renderDueDateCalendar();
+      renderCalendarTasks();
+    }
   });
 });
 
@@ -1135,6 +1469,16 @@ nextRangeButton.addEventListener("click", () => {
     ? addMonths(currentReportDate, 1)
     : addDays(currentReportDate, currentReportRange === "week" ? 7 : 1);
   loadWorkTimeChart();
+});
+
+previousCalendarMonthButton.addEventListener("click", () => {
+  currentCalendarDate = addMonths(currentCalendarDate, -1);
+  renderDueDateCalendar();
+});
+
+nextCalendarMonthButton.addEventListener("click", () => {
+  currentCalendarDate = addMonths(currentCalendarDate, 1);
+  renderDueDateCalendar();
 });
 
 addFolderButton.addEventListener("click", () => {
@@ -1189,7 +1533,25 @@ tagViewButton.addEventListener("click", () => {
   setViewMode("tag");
 });
 
+taskSortButton.addEventListener("click", () => {
+  taskSortOptions.classList.toggle("hidden");
+});
+
+document.querySelectorAll("#taskSortOptions button").forEach((button) => {
+  button.addEventListener("click", () => {
+    currentTaskSort = button.dataset.sort;
+    closeTaskSortOptions();
+    renderTaskSortButton();
+    renderTaskLists();
+    showStatus(`タスクの並び順を${taskSortLabels[currentTaskSort]}に変更しました。`);
+  });
+});
+
 document.addEventListener("click", (event) => {
+  if (!event.target.closest(".sort-menu")) {
+    closeTaskSortOptions();
+  }
+
   if (!event.target.closest(".tag-context-menu")) {
     closeTagContextMenu();
   }
@@ -1225,6 +1587,14 @@ openResetModalButton.addEventListener("click", () => {
   openResetModal();
 });
 
+openGoogleCalendarModalButton.addEventListener("click", () => {
+  openGoogleCalendarModal();
+});
+
+closeGoogleCalendarModalButton.addEventListener("click", () => {
+  closeGoogleCalendarModal();
+});
+
 cancelResetButton.addEventListener("click", () => {
   closeResetModal();
 });
@@ -1236,6 +1606,7 @@ confirmResetButton.addEventListener("click", () => {
 setupThemeButtons();
 setTimerMode(timerMode);
 renderViewMode();
+renderTaskSortButton();
 loadFolders()
   .then(loadTags)
   .then(loadTasks)

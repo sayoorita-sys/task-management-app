@@ -17,6 +17,9 @@
             <button class="tab-button" type="button" data-page="reportPage">
               振り返り
             </button>
+            <button class="tab-button" type="button" data-page="calendarPage">
+              カレンダー
+            </button>
             <button class="tab-button" type="button" data-page="settingsPage">
               設定
             </button>
@@ -31,6 +34,17 @@
             <button class="view-mode-button" id="tagViewButton" type="button">
               タグごとに表示
             </button>
+            <div class="sort-menu">
+              <button class="view-mode-button" id="taskSortButton" type="button">
+                並び替え
+              </button>
+              <div class="sort-options hidden" id="taskSortOptions">
+                <button type="button" data-sort="due-asc">締切日が早い順</button>
+                <button type="button" data-sort="due-desc">締切日が遅い順</button>
+                <button type="button" data-sort="title-asc">50音順</button>
+                <button type="button" data-sort="custom">カスタム</button>
+              </div>
+            </div>
           </div>
           <div class="folder-toolbar" id="folderControls">
             <div class="folder-list" id="folderList"></div>
@@ -82,6 +96,20 @@
             </div>
           </div>
           <canvas id="workTimeChart"></canvas>
+        </section>
+
+        <section class="page" id="calendarPage">
+          <h2>カレンダー</h2>
+          <div class="calendar-header">
+            <button class="arrow-button" id="previousCalendarMonthButton" type="button">←</button>
+            <strong id="calendarMonthLabel"></strong>
+            <button class="arrow-button" id="nextCalendarMonthButton" type="button">→</button>
+          </div>
+          <div class="due-date-calendar" id="dueDateCalendar"></div>
+          <h3 class="calendar-subheading">Googleカレンダーに追加</h3>
+          <button id="openGoogleCalendarModalButton" type="button">
+            Googleカレンダー連携
+          </button>
         </section>
 
         <section class="page" id="settingsPage">
@@ -163,8 +191,22 @@
         </div>
       </section>
     </div>
+    <div class="modal-backdrop hidden" id="googleCalendarModal">
+      <section class="folder-modal google-calendar-modal" aria-labelledby="googleCalendarModalTitle">
+        <button
+          class="modal-close-button"
+          id="closeGoogleCalendarModalButton"
+          type="button"
+          aria-label="閉じる"
+        >
+          ×
+        </button>
+        <h2 id="googleCalendarModalTitle">登録するタスクを選択</h2>
+        <div class="calendar-task-list" id="googleCalendarTaskList"></div>
+      </section>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="script.js?v=20260712-6"></script>
+    <script src="script.js?v=20260712-8"></script>
   </body>
 </html>

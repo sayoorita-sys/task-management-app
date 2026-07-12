@@ -83,6 +83,7 @@ async function setupDatabase() {
       tag_name TEXT,
       tag_color TEXT DEFAULT '#38bdf8',
       folder_name TEXT DEFAULT 'tasks',
+      custom_order INTEGER,
       is_hidden BOOLEAN DEFAULT false,
       completed_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -95,9 +96,11 @@ async function setupDatabase() {
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS tag_name TEXT");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS tag_color TEXT DEFAULT '#38bdf8'");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS folder_name TEXT DEFAULT 'tasks'");
+  await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_order INTEGER");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT false");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+  await pool.query("UPDATE tasks SET custom_order = id WHERE custom_order IS NULL");
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tags (
@@ -296,8 +299,8 @@ app.post("/api/tasks", async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO tasks (title, due_date, estimated_minutes, tag_name, tag_color, folder_name)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO tasks (title, due_date, estimated_minutes, tag_name, tag_color, folder_name, custom_order)
+       VALUES ($1, $2, $3, $4, $5, $6, COALESCE((SELECT MAX(custom_order) + 1 FROM tasks), 1))
        RETURNING *`,
       [
         req.body.title,
@@ -334,6 +337,36 @@ app.post("/api/tasks/:id/subtasks", async (req, res) => {
     res.json(result.rows[0]);
   } catch (error) {
     handleError(res, error, "サブタスクの追加に失敗しました。");
+  }
+});
+
+app.patch("/api/tasks/reorder", async (req, res) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
+
+  if (ids.length === 0) {
+    res.status(400).json({ error: "並び替えるタスクを選択してください。" });
+    return;
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    for (let index = 0; index < ids.length; index += 1) {
+      await client.query(
+        "UPDATE tasks SET custom_order = $1 WHERE id = $2",
+        [index + 1, ids[index]],
+      );
+    }
+
+    await client.query("COMMIT");
+    res.json({ ok: true });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    handleError(res, error, "タスクの並び替え保存に失敗しました。");
+  } finally {
+    client.release();
   }
 });
 

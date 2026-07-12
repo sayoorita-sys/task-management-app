@@ -169,6 +169,33 @@ form {
   margin-bottom: 14px;
 }
 
+.sort-menu {
+  position: relative;
+}
+
+.sort-options {
+  background: white;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(16, 32, 51, 0.16);
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+  padding: 8px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+}
+
+.sort-options button {
+  justify-content: flex-start;
+}
+
+.sort-options button.active {
+  outline: 2px solid var(--theme-dark);
+}
+
 .folder-toolbar label {
   color: #46606f;
   display: grid;
@@ -249,9 +276,24 @@ form {
   margin-top: 28px;
 }
 
+.task-section-header {
+  align-items: end;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
 .task-section h2,
 .report-header h2 {
-  margin: 0 0 12px;
+  margin: 0;
+}
+
+.sort-control {
+  color: #46606f;
+  display: grid;
+  gap: 4px;
+  min-width: 180px;
 }
 
 .task-list {
@@ -290,6 +332,17 @@ form {
   font-size: 1rem;
   margin: 0 0 6px;
   overflow-wrap: anywhere;
+}
+
+.custom-sort-controls {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.custom-sort-controls button {
+  min-width: 40px;
+  padding: 6px 10px;
 }
 
 .task-meta-row {
@@ -366,6 +419,139 @@ form {
   display: none;
 }
 
+.calendar-task-list {
+  display: grid;
+  gap: 12px;
+}
+
+.google-calendar-modal {
+  max-width: 780px;
+  max-height: 82vh;
+  overflow-y: auto;
+  width: min(100%, 780px);
+}
+
+.calendar-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.calendar-subheading {
+  margin: 28px 0 12px;
+}
+
+.due-date-calendar {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.calendar-weekday,
+.calendar-day {
+  background: white;
+  border: 1px solid var(--theme-border);
+}
+
+.calendar-weekday {
+  color: #46606f;
+  font-weight: 700;
+  padding: 8px;
+  text-align: center;
+}
+
+.calendar-day {
+  align-content: start;
+  display: grid;
+  gap: 6px;
+  min-height: 110px;
+  padding: 8px;
+}
+
+.calendar-day.outside-month {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.calendar-day.today {
+  box-shadow: inset 0 0 0 2px var(--theme-color);
+}
+
+.calendar-day > strong {
+  font-size: 0.9rem;
+}
+
+.calendar-due-task {
+  background: var(--theme-card);
+  border-left: 4px solid #38bdf8;
+  border-radius: 6px;
+  color: #102033;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+  padding: 4px 6px;
+}
+
+.calendar-due-task.completed {
+  color: #8a98a3;
+  text-decoration: line-through;
+}
+
+.calendar-task-card {
+  align-items: center;
+  background: white;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(160px, 1fr) 110px 190px auto;
+  padding: 14px;
+}
+
+.calendar-task-card h3 {
+  font-size: 1rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.calendar-task-card p {
+  color: #46606f;
+  font-weight: 700;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.google-calendar-modal .calendar-task-list {
+  gap: 10px;
+}
+
+.google-calendar-modal .calendar-task-card {
+  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr) 180px;
+}
+
+.google-calendar-modal .calendar-task-card h3 {
+  grid-column: 1;
+}
+
+.google-calendar-modal .calendar-task-card p {
+  grid-column: 1;
+  white-space: normal;
+}
+
+.google-calendar-modal .calendar-task-card input {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-width: 0;
+  width: 100%;
+}
+
+.google-calendar-modal .calendar-task-card button {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
 .hide-button {
   background: #64748b;
   min-width: 72px;
@@ -420,12 +606,14 @@ form {
 }
 
 .stopwatch-time {
+  color: var(--theme-dark);
   font-size: 2.4rem;
   font-weight: 700;
   margin: 4px 0;
 }
 
 .stopwatch-total-time {
+  color: var(--theme-dark);
   font-size: 1.6rem;
   font-weight: 700;
   margin: 4px 0;
@@ -462,7 +650,7 @@ form {
 }
 
 .analog-hand {
-  background: #102033;
+  background: var(--theme-dark);
   bottom: 50%;
   left: 50%;
   position: absolute;
@@ -480,7 +668,7 @@ form {
 }
 
 .second-hand {
-  background: var(--theme-color);
+  background: var(--theme-button-bg);
   height: 70px;
   width: 2px;
 }
@@ -602,7 +790,8 @@ form {
   }
 
   .app-header,
-  .report-header {
+  .report-header,
+  .task-section-header {
     align-items: stretch;
     flex-direction: column;
   }
@@ -610,6 +799,29 @@ form {
   .task-card {
     align-items: start;
     grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .calendar-task-card {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .google-calendar-modal .calendar-task-card h3,
+  .google-calendar-modal .calendar-task-card p,
+  .google-calendar-modal .calendar-task-card input,
+  .google-calendar-modal .calendar-task-card button {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: stretch;
+  }
+
+  .due-date-calendar {
+    font-size: 0.85rem;
+  }
+
+  .calendar-day {
+    min-height: 90px;
+    padding: 6px;
   }
 
   .task-cell,
