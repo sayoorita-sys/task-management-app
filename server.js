@@ -170,7 +170,6 @@ app.post("/api/auth/register", async (req, res) => {
 
   try {
     await client.query("BEGIN");
-    const userCountResult = await client.query("SELECT COUNT(*)::int AS count FROM users");
     const userResult = await client.query(
       `INSERT INTO users (name, email, password_hash)
        VALUES ($1, $2, $3)
@@ -178,12 +177,6 @@ app.post("/api/auth/register", async (req, res) => {
       [name, email, hashPassword(password)],
     );
     const user = userResult.rows[0];
-
-    if (userCountResult.rows[0].count === 0) {
-      await client.query("UPDATE tasks SET user_id = $1 WHERE user_id IS NULL", [user.id]);
-      await client.query("UPDATE tags SET user_id = $1 WHERE user_id IS NULL", [user.id]);
-      await client.query("UPDATE folders SET user_id = $1 WHERE user_id IS NULL", [user.id]);
-    }
 
     await client.query(
       `INSERT INTO folders (name, user_id)
