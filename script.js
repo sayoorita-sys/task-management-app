@@ -576,72 +576,125 @@ function openTagContextMenu(event, tag) {
   positionContextMenu(contextMenu, event);
 }
 
-function renderTaskEditForm(contextMenu, task, event) {
+function createTaskContextInput(labelText, input) {
+  const label = document.createElement("label");
+  label.textContent = labelText;
+  label.appendChild(input);
+
+  return label;
+}
+
+async function saveTaskContextChanges(task, changes, successMessage, saveButton) {
+  saveButton.disabled = true;
+  showStatus("タスクを更新中...");
+
+  try {
+    const response = await fetchWithTimeout(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    });
+
+    if (!response.ok) {
+      showError(await readError(response));
+      return false;
+    }
+
+    closeTaskContextMenu();
+    showStatus(successMessage);
+    await loadTags();
+    await loadTasks();
+    return true;
+  } finally {
+    saveButton.disabled = false;
+  }
+}
+
+function renderTaskFieldEditor(contextMenu, task, event, fieldName) {
   contextMenu.innerHTML = "";
 
   const heading = document.createElement("strong");
-  heading.textContent = "タスクを編集";
+  const fieldLabels = {
+    title: "タスク名",
+    due_date: "締切日",
+    estimated_minutes: "予想所要時間",
+    tag: "タグ",
+    folder_name: "フォルダ",
+  };
+
+  heading.textContent = `${fieldLabels[fieldName]}を変更`;
   contextMenu.appendChild(heading);
 
   const form = document.createElement("form");
   form.className = "task-context-form";
 
-  const titleLabel = document.createElement("label");
-  titleLabel.textContent = "タスク名";
-  const titleInput = document.createElement("input");
-  titleInput.type = "text";
-  titleInput.value = task.title;
-  titleInput.required = true;
-  titleLabel.appendChild(titleInput);
+  let getChanges;
 
-  const dueDateLabel = document.createElement("label");
-  dueDateLabel.textContent = "締切日";
-  const dueDateEditInput = document.createElement("input");
-  dueDateEditInput.type = "date";
-  dueDateEditInput.value = task.due_date ? task.due_date.slice(0, 10) : "";
-  dueDateLabel.appendChild(dueDateEditInput);
-
-  const estimateLabel = document.createElement("label");
-  estimateLabel.textContent = "予想所要時間（分）";
-  const estimateInput = document.createElement("input");
-  estimateInput.type = "number";
-  estimateInput.min = "1";
-  estimateInput.value = task.estimated_minutes || "";
-  estimateLabel.appendChild(estimateInput);
-
-  const tagLabel = document.createElement("label");
-  tagLabel.textContent = "タグ";
-  const tagInput = document.createElement("input");
-  tagInput.type = "text";
-  tagInput.value = task.tag_name || "";
-  tagInput.placeholder = "タグなし";
-  tagLabel.appendChild(tagInput);
-
-  const tagColorLabel = document.createElement("label");
-  tagColorLabel.textContent = "タグ色";
-  const tagColorEditInput = document.createElement("input");
-  tagColorEditInput.type = "color";
-  tagColorEditInput.value = task.tag_color || "#38bdf8";
-  tagColorLabel.appendChild(tagColorEditInput);
-
-  const folderLabel = document.createElement("label");
-  folderLabel.textContent = "フォルダの編入";
-  const folderSelect = document.createElement("select");
-  const folderNames = allFolders.map((folder) => folder.name);
-
-  if (!folderNames.includes(task.folder_name)) {
-    folderNames.push(task.folder_name || "tasks");
+  if (fieldName === "title") {
+    const titleInput = document.createElement("input");
+    titleInput.type = "text";
+    titleInput.value = task.title;
+    titleInput.required = true;
+    form.appendChild(createTaskContextInput("タスク名", titleInput));
+    getChanges = () => ({ title: titleInput.value });
   }
 
-  folderNames.forEach((folderName) => {
-    const option = document.createElement("option");
-    option.value = folderName;
-    option.textContent = folderName;
-    option.selected = folderName === task.folder_name;
-    folderSelect.appendChild(option);
-  });
+  if (fieldName === "due_date") {
+    const dueDateEditInput = document.createElement("input");
+    dueDateEditInput.type = "date";
+    dueDateEditInput.value = task.due_date ? task.due_date.slice(0, 10) : "";
+    form.appendChild(createTaskContextInput("締切日", dueDateEditInput));
+    getChanges = () => ({ due_date: dueDateEditInput.value });
+  }
 
-  folderLabel.appendChild(folderSelect);
+  if (fieldName === "estimated_minutes") {
+    const estimateInput = document.createElement("input");
+    estimateInput.type = "number";
+    estimateInput.min = "1";
+    estimateInput.placeholder = "予想なし";
+    estimateInput.value = task.estimated_minutes || "";
+    form.appendChild(createTaskContextInput("予想所要時間（分）", estimateInput));
+    getChanges = () => ({ estimated_minutes: estimateInput.value });
+  }
+
+  if (fieldName === "tag") {
+    const tagInput = document.createElement("input");
+    tagInput.type = "text";
+    tagInput.value = task.tag_name || "";
+    tagInput.placeholder = "タグなし";
+    form.appendChild(createTaskContextInput("タグ", tagInput));
+
+    const tagColorEditInput = document.createElement("input");
+    tagColorEditInput.type = "color";
+    tagColorEditInput.value = task.tag_color || "#38bdf8";
+    form.appendChild(createTaskContextInput("タグ色", tagColorEditInput));
+
+    getChanges = () => ({
+      tag_name: tagInput.value,
+      tag_color: tagColorEditInput.value,
+    });
+  }
+
+  if (fieldName === "folder_name") {
+    const folderSelect = document.createElement("select");
+    const selectedFolder = task.folder_name || "tasks";
+    const folderNames = allFolders.map((folder) => folder.name).filter(Boolean);
+
+    if (!folderNames.includes(selectedFolder)) {
+      folderNames.push(selectedFolder);
+    }
+
+    folderNames.forEach((folderName) => {
+      const option = document.createElement("option");
+      option.value = folderName;
+      option.textContent = folderName;
+      option.selected = folderName === selectedFolder;
+      folderSelect.appendChild(option);
+    });
+
+    form.appendChild(createTaskContextInput("フォルダ", folderSelect));
+    getChanges = () => ({ folder_name: folderSelect.value });
+  }
 
   const actions = document.createElement("div");
   actions.className = "task-context-actions";
@@ -653,55 +706,59 @@ function renderTaskEditForm(contextMenu, task, event) {
   const cancelButton = document.createElement("button");
   cancelButton.type = "button";
   cancelButton.className = "secondary-button";
-  cancelButton.textContent = "キャンセル";
-  cancelButton.addEventListener("click", closeTaskContextMenu);
+  cancelButton.textContent = "戻る";
+  cancelButton.addEventListener("click", () => {
+    renderTaskEditMenu(contextMenu, task, event);
+  });
 
   actions.appendChild(saveButton);
   actions.appendChild(cancelButton);
 
-  form.appendChild(titleLabel);
-  form.appendChild(dueDateLabel);
-  form.appendChild(estimateLabel);
-  form.appendChild(tagLabel);
-  form.appendChild(tagColorLabel);
-  form.appendChild(folderLabel);
   form.appendChild(actions);
 
   form.addEventListener("submit", async (submitEvent) => {
     submitEvent.preventDefault();
 
-    saveButton.disabled = true;
-    showStatus("タスクを更新中...");
-
-    try {
-      const response = await fetchWithTimeout(`/api/tasks/${task.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: titleInput.value,
-          due_date: dueDateEditInput.value,
-          estimated_minutes: estimateInput.value,
-          tag_name: tagInput.value,
-          tag_color: tagColorEditInput.value,
-          folder_name: folderSelect.value,
-        }),
-      });
-
-      if (!response.ok) {
-        showError(await readError(response));
-        return;
-      }
-
-      closeTaskContextMenu();
-      showStatus("タスクを更新しました。");
-      await loadTags();
-      await loadTasks();
-    } finally {
-      saveButton.disabled = false;
-    }
+    await saveTaskContextChanges(
+      task,
+      getChanges(),
+      `${fieldLabels[fieldName]}を更新しました。`,
+      saveButton,
+    );
   });
 
   contextMenu.appendChild(form);
+  positionContextMenu(contextMenu, event);
+}
+
+function renderTaskEditMenu(contextMenu, task, event) {
+  contextMenu.innerHTML = "";
+
+  const heading = document.createElement("strong");
+  heading.textContent = "変更する項目";
+  contextMenu.appendChild(heading);
+
+  const choiceList = document.createElement("div");
+  choiceList.className = "task-edit-choice-list";
+
+  [
+    ["title", "タスク名"],
+    ["due_date", "締切日"],
+    ["estimated_minutes", "予想所要時間"],
+    ["tag", "タグ"],
+    ["folder_name", "フォルダ"],
+  ].forEach(([fieldName, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      renderTaskFieldEditor(contextMenu, task, event, fieldName);
+    });
+
+    choiceList.appendChild(button);
+  });
+
+  contextMenu.appendChild(choiceList);
   positionContextMenu(contextMenu, event);
 }
 
@@ -711,9 +768,12 @@ function openTaskContextMenu(event, task) {
 
   const contextMenu = document.createElement("div");
   contextMenu.className = "task-context-menu";
+  contextMenu.addEventListener("click", (clickEvent) => {
+    clickEvent.stopPropagation();
+  });
 
   document.body.appendChild(contextMenu);
-  renderTaskEditForm(contextMenu, task, event);
+  renderTaskEditMenu(contextMenu, task, event);
   positionContextMenu(contextMenu, event);
 }
 

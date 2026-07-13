@@ -289,9 +289,11 @@ form {
 
 .task-context-menu {
   display: grid;
-  gap: 8px;
-  min-width: 280px;
-  max-width: min(360px, calc(100vw - 16px));
+  box-sizing: border-box;
+  gap: 10px;
+  min-width: 240px;
+  max-width: min(340px, calc(100vw - 16px));
+  width: max-content;
 }
 
 .task-context-menu strong {
@@ -301,42 +303,62 @@ form {
 }
 
 .task-context-form,
+.task-edit-choice-list,
 .folder-move-list {
   display: grid;
-  gap: 6px;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+
+.task-edit-choice-list button {
+  justify-content: flex-start;
+  min-height: 38px;
+  text-align: left;
+  width: 100%;
 }
 
 .task-context-form label {
+  box-sizing: border-box;
   color: #46606f;
   display: grid;
   font-size: 0.82rem;
   font-weight: 700;
-  gap: 4px;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
 }
 
 .task-context-form input,
 .task-context-form select {
   border: 1px solid var(--theme-border);
   border-radius: 7px;
+  box-sizing: border-box;
   color: #0f2437;
   font: inherit;
   min-height: 38px;
+  min-width: 0;
   padding: 8px 10px;
+  width: 100%;
 }
 
 .task-context-form input[type="color"] {
+  max-width: 100%;
   padding: 4px;
 }
 
 .task-context-actions {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   grid-template-columns: 1fr 1fr;
-  margin-top: 4px;
+  margin-top: 2px;
+  min-width: 0;
+  width: 100%;
 }
 
 .task-context-actions button {
   min-width: 0;
+  width: 100%;
 }
 
 .hidden-tag-section {
