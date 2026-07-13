@@ -73,6 +73,8 @@ const themeColors = [
   { name: "オレンジ", value: "#f97316" },
 ];
 
+const maxAttachmentBytes = 3 * 1024 * 1024;
+
 const taskSortLabels = {
   "due-asc": "締切日が早い順",
   "due-desc": "締切日が遅い順",
@@ -404,7 +406,28 @@ function createEmptyMessage(message) {
 }
 
 function isInteractiveElement(target) {
-  return ["BUTTON", "INPUT", "FORM"].includes(target.tagName);
+  return ["A", "BUTTON", "INPUT", "FORM", "LABEL", "SELECT"].includes(target.tagName);
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) {
+    return "";
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${Math.ceil(bytes / 1024)}KB`;
+  }
+
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(reader.result));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsDataURL(file);
+  });
 }
 
 function renderViewMode() {
@@ -850,7 +873,143 @@ function createSubtaskArea(task) {
   });
 
   subtaskArea.appendChild(form);
+  subtaskArea.appendChild(createAttachmentArea(task));
   return subtaskArea;
+}
+
+function createAttachmentArea(task) {
+  const attachmentArea = document.createElement("section");
+  attachmentArea.className = "attachment-area";
+
+  const heading = document.createElement("h4");
+  heading.textContent = "添付ファイル";
+  attachmentArea.appendChild(heading);
+
+  const attachmentList = document.createElement("div");
+  attachmentList.className = "attachment-list";
+
+  if (!task.attachments || task.attachments.length === 0) {
+    const emptyText = document.createElement("p");
+    emptyText.className = "attachment-empty";
+    emptyText.textContent = "まだ添付ファイルはありません。";
+    attachmentList.appendChild(emptyText);
+  } else {
+    task.attachments.forEach((attachment) => {
+      const item = document.createElement("div");
+      item.className = "attachment-item";
+
+      if (attachment.mime_type && attachment.mime_type.startsWith("image/")) {
+        const preview = document.createElement("img");
+        preview.className = "attachment-preview";
+        preview.src = attachment.data_url;
+        preview.alt = attachment.file_name;
+        item.appendChild(preview);
+      } else {
+        item.classList.add("without-preview");
+      }
+
+      const info = document.createElement("div");
+      info.className = "attachment-info";
+
+      const link = document.createElement("a");
+      link.href = attachment.data_url;
+      link.download = attachment.file_name;
+      link.textContent = attachment.file_name;
+      link.target = "_blank";
+
+      const meta = document.createElement("span");
+      meta.textContent = formatFileSize(Number(attachment.file_size || 0));
+
+      info.appendChild(link);
+      info.appendChild(meta);
+
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "attachment-delete-button";
+      deleteButton.textContent = "削除";
+      deleteButton.addEventListener("click", async () => {
+        const response = await fetchWithTimeout(`/api/attachments/${attachment.id}`, {
+          method: "DELETE",
+        });
+
+        if (!response.ok) {
+          showError(await readError(response));
+          return;
+        }
+
+        showStatus("添付ファイルを削除しました。");
+        await loadTasks();
+      });
+
+      item.appendChild(info);
+      item.appendChild(deleteButton);
+      attachmentList.appendChild(item);
+    });
+  }
+
+  const form = document.createElement("form");
+  form.className = "attachment-form";
+
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.multiple = true;
+
+  const uploadButton = document.createElement("button");
+  uploadButton.type = "submit";
+  uploadButton.textContent = "添付";
+
+  form.appendChild(fileInput);
+  form.appendChild(uploadButton);
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const files = Array.from(fileInput.files || []);
+
+    if (files.length === 0) {
+      showError("添付するファイルを選択してください。");
+      return;
+    }
+
+    uploadButton.disabled = true;
+    showStatus("添付ファイルを保存中...");
+
+    try {
+      for (const file of files) {
+        if (file.size > maxAttachmentBytes) {
+          showError("添付できるファイルは1つ3MBまでです。");
+          return;
+        }
+
+        const dataUrl = await fileToDataUrl(file);
+        const response = await fetchWithTimeout(`/api/tasks/${task.id}/attachments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            file_name: file.name,
+            mime_type: file.type,
+            file_size: file.size,
+            data_url: dataUrl,
+          }),
+        });
+
+        if (!response.ok) {
+          showError(await readError(response));
+          return;
+        }
+      }
+
+      fileInput.value = "";
+      showStatus("添付ファイルを保存しました。");
+      await loadTasks();
+    } finally {
+      uploadButton.disabled = false;
+    }
+  });
+
+  attachmentArea.appendChild(attachmentList);
+  attachmentArea.appendChild(form);
+  return attachmentArea;
 }
 
 function createCustomSortControls(task, customSortContext) {

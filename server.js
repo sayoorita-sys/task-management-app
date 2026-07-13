@@ -4,8 +4,9 @@ const { Pool } = require("pg");
 
 const app = express();
 const port = process.env.PORT || 3000;
+const maxAttachmentBytes = 3 * 1024 * 1024;
 
-app.use(express.json());
+app.use(express.json({ limit: "8mb" }));
 app.use(express.static("."));
 
 process.on("exit", (code) => {
@@ -263,6 +264,13 @@ app.delete("/api/reset-data", async (req, res) => {
        )`,
       [req.user.id],
     );
+    await client.query(
+      `DELETE FROM task_attachments
+       WHERE task_id IN (
+         SELECT id FROM tasks WHERE user_id = $1
+       )`,
+      [req.user.id],
+    );
     await client.query("DELETE FROM tasks WHERE user_id = $1", [req.user.id]);
     await client.query("DELETE FROM tags WHERE user_id = $1", [req.user.id]);
     await client.query("DELETE FROM folders WHERE user_id = $1", [req.user.id]);
@@ -375,6 +383,18 @@ async function setupDatabase() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS task_attachments (
+      id SERIAL PRIMARY KEY,
+      task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+      file_name TEXT NOT NULL,
+      mime_type TEXT,
+      file_size INTEGER,
+      data_url TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 }
 
 app.get("/api/tasks", async (req, res) => {
@@ -431,9 +451,27 @@ app.get("/api/tasks", async (req, res) => {
       return groups;
     }, {});
 
+    const attachmentsResult = await pool.query(`
+      SELECT task_attachments.*
+      FROM task_attachments
+      JOIN tasks ON tasks.id = task_attachments.task_id
+      WHERE tasks.user_id = $1
+      ORDER BY task_attachments.created_at ASC, task_attachments.id ASC
+    `, [req.user.id]);
+
+    const attachmentsByTaskId = attachmentsResult.rows.reduce((groups, attachment) => {
+      if (!groups[attachment.task_id]) {
+        groups[attachment.task_id] = [];
+      }
+
+      groups[attachment.task_id].push(attachment);
+      return groups;
+    }, {});
+
     const tasks = result.rows.map((task) => ({
       ...task,
       subtasks: subtasksByTaskId[task.id] || [],
+      attachments: attachmentsByTaskId[task.id] || [],
     }));
 
     res.json(tasks);
@@ -589,6 +627,74 @@ app.post("/api/tasks/:id/subtasks", async (req, res) => {
     res.json(result.rows[0]);
   } catch (error) {
     handleError(res, error, "サブタスクの追加に失敗しました。");
+  }
+});
+
+app.post("/api/tasks/:id/attachments", async (req, res) => {
+  try {
+    const fileName = String(req.body.file_name || "").trim();
+    const mimeType = String(req.body.mime_type || "").trim();
+    const dataUrl = String(req.body.data_url || "");
+    const fileSize = Number(req.body.file_size || 0);
+
+    if (!fileName || !dataUrl) {
+      res.status(400).json({ error: "添付するファイルを選択してください。" });
+      return;
+    }
+
+    if (!dataUrl.startsWith("data:") || !dataUrl.includes(";base64,")) {
+      res.status(400).json({ error: "ファイルの形式を確認してください。" });
+      return;
+    }
+
+    if (!Number.isFinite(fileSize) || fileSize <= 0 || fileSize > maxAttachmentBytes) {
+      res.status(400).json({ error: "添付できるファイルは1つ3MBまでです。" });
+      return;
+    }
+
+    const result = await pool.query(
+      `INSERT INTO task_attachments (task_id, file_name, mime_type, file_size, data_url)
+       SELECT $1, $2, $3, $4, $5
+       WHERE EXISTS (
+         SELECT 1 FROM tasks WHERE id = $1 AND user_id = $6
+       )
+       RETURNING *`,
+      [req.params.id, fileName, mimeType, fileSize, dataUrl, req.user.id],
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: "タスクが見つかりませんでした。" });
+      return;
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    handleError(res, error, "添付ファイルの保存に失敗しました。");
+  }
+});
+
+app.delete("/api/attachments/:id", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `DELETE FROM task_attachments
+       WHERE id = $1
+         AND EXISTS (
+           SELECT 1 FROM tasks
+           WHERE tasks.id = task_attachments.task_id
+             AND tasks.user_id = $2
+         )
+       RETURNING *`,
+      [req.params.id, req.user.id],
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: "添付ファイルが見つかりませんでした。" });
+      return;
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    handleError(res, error, "添付ファイルの削除に失敗しました。");
   }
 });
 

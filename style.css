@@ -529,6 +529,95 @@ form {
   margin: 0;
 }
 
+.attachment-area {
+  border-top: 1px dashed var(--theme-border);
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 12px;
+}
+
+.attachment-area h4 {
+  color: #0f2437;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.attachment-list {
+  display: grid;
+  gap: 8px;
+}
+
+.attachment-empty {
+  color: #78909c;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.attachment-item {
+  align-items: center;
+  background: white;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 8px;
+}
+
+.attachment-item.without-preview {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.attachment-preview {
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  height: 48px;
+  object-fit: cover;
+  width: 64px;
+}
+
+.attachment-info {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.attachment-info a {
+  color: var(--theme-dark);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.attachment-info span {
+  color: #78909c;
+  font-size: 0.82rem;
+}
+
+.attachment-delete-button {
+  background: #f43f5e;
+  border-color: #f43f5e;
+  color: white;
+  min-width: 56px;
+  padding: 8px 10px;
+}
+
+.attachment-form {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 0;
+}
+
+.attachment-form input[type="file"] {
+  background: white;
+  border: 1px solid var(--theme-border);
+  border-radius: 7px;
+  min-width: 0;
+  padding: 8px;
+  width: 100%;
+}
+
 .timer-stopped {
   display: none;
 }
