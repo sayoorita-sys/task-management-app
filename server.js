@@ -887,13 +887,13 @@ app.post("/api/tasks/:id/timer/stop", async (req, res) => {
       `UPDATE time_logs
        SET ended_at = CURRENT_TIMESTAMP,
            duration_minutes = ROUND((EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at)) / 60)::numeric, 2)
-       WHERE id = (
-         SELECT id
-         FROM time_logs
-         JOIN tasks ON tasks.id = time_logs.task_id
-         WHERE task_id = $1 AND ended_at IS NULL
+       WHERE time_logs.id = (
+         SELECT tl.id
+         FROM time_logs AS tl
+         JOIN tasks ON tasks.id = tl.task_id
+         WHERE tl.task_id = $1 AND tl.ended_at IS NULL
            AND tasks.user_id = $2
-         ORDER BY started_at DESC
+         ORDER BY tl.started_at DESC
          LIMIT 1
        )
        RETURNING *`,
