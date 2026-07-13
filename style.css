@@ -290,7 +290,8 @@ form {
 .task-context-menu {
   display: grid;
   gap: 8px;
-  min-width: 160px;
+  min-width: 280px;
+  max-width: min(360px, calc(100vw - 16px));
 }
 
 .task-context-menu strong {
@@ -299,9 +300,43 @@ form {
   padding: 4px 6px 0;
 }
 
+.task-context-form,
 .folder-move-list {
   display: grid;
   gap: 6px;
+}
+
+.task-context-form label {
+  color: #46606f;
+  display: grid;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 4px;
+}
+
+.task-context-form input,
+.task-context-form select {
+  border: 1px solid var(--theme-border);
+  border-radius: 7px;
+  color: #0f2437;
+  font: inherit;
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+.task-context-form input[type="color"] {
+  padding: 4px;
+}
+
+.task-context-actions {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 4px;
+}
+
+.task-context-actions button {
+  min-width: 0;
 }
 
 .hidden-tag-section {

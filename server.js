@@ -713,11 +713,57 @@ app.patch("/api/tasks/:id", async (req, res) => {
       return;
     }
 
-    if (typeof req.body.folder_name === "string") {
-      const folderName = req.body.folder_name.trim();
+    const taskDetailFields = [
+      "title",
+      "due_date",
+      "estimated_minutes",
+      "tag_name",
+      "tag_color",
+      "folder_name",
+    ];
+
+    if (taskDetailFields.some((field) => Object.prototype.hasOwnProperty.call(req.body, field))) {
+      const currentTaskResult = await pool.query(
+        "SELECT * FROM tasks WHERE id = $1 AND user_id = $2",
+        [req.params.id, req.user.id],
+      );
+
+      if (currentTaskResult.rows.length === 0) {
+        res.status(404).json({ error: "タスクが見つかりませんでした。" });
+        return;
+      }
+
+      const currentTask = currentTaskResult.rows[0];
+      const title =
+        typeof req.body.title === "string" ? req.body.title.trim() : currentTask.title;
+      const dueDate =
+        typeof req.body.due_date === "string"
+          ? req.body.due_date || null
+          : currentTask.due_date;
+      const estimatedMinutes =
+        req.body.estimated_minutes === "" || req.body.estimated_minutes === null
+          ? null
+          : req.body.estimated_minutes ?? currentTask.estimated_minutes;
+      const tagName =
+        typeof req.body.tag_name === "string"
+          ? req.body.tag_name.trim()
+          : currentTask.tag_name || "";
+      const folderName =
+        typeof req.body.folder_name === "string"
+          ? req.body.folder_name.trim()
+          : currentTask.folder_name || "tasks";
+      let tagColor =
+        typeof req.body.tag_color === "string" && req.body.tag_color
+          ? req.body.tag_color
+          : currentTask.tag_color || "#38bdf8";
 
       if (!folderName) {
         res.status(400).json({ error: "移動先フォルダを選択してください。" });
+        return;
+      }
+
+      if (!title) {
+        res.status(400).json({ error: "タスク名を入力してください。" });
         return;
       }
 
@@ -731,9 +777,39 @@ app.patch("/api/tasks/:id", async (req, res) => {
         return;
       }
 
+      if (tagName) {
+        const tagResult = await pool.query(
+          `INSERT INTO tags (name, color, user_id)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (user_id, name) WHERE user_id IS NOT NULL
+           DO UPDATE SET color = EXCLUDED.color
+           RETURNING *`,
+          [tagName, tagColor, req.user.id],
+        );
+
+        tagColor = tagResult.rows[0].color;
+      }
+
       const result = await pool.query(
-        "UPDATE tasks SET folder_name = $1 WHERE id = $2 AND user_id = $3 RETURNING *",
-        [folderName, req.params.id, req.user.id],
+        `UPDATE tasks
+         SET title = $1,
+             due_date = $2,
+             estimated_minutes = $3,
+             tag_name = $4,
+             tag_color = $5,
+             folder_name = $6
+         WHERE id = $7 AND user_id = $8
+         RETURNING *`,
+        [
+          title,
+          dueDate,
+          estimatedMinutes,
+          tagName || null,
+          tagColor,
+          folderName,
+          req.params.id,
+          req.user.id,
+        ],
       );
 
       if (result.rows.length === 0) {

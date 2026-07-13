@@ -576,26 +576,115 @@ function openTagContextMenu(event, tag) {
   positionContextMenu(contextMenu, event);
 }
 
-function renderFolderMoveChoices(contextMenu, task, event) {
+function renderTaskEditForm(contextMenu, task, event) {
   contextMenu.innerHTML = "";
 
   const heading = document.createElement("strong");
-  heading.textContent = "移動先フォルダ";
+  heading.textContent = "タスクを編集";
   contextMenu.appendChild(heading);
 
-  const folderChoiceList = document.createElement("div");
-  folderChoiceList.className = "folder-move-list";
+  const form = document.createElement("form");
+  form.className = "task-context-form";
 
-  allFolders.forEach((folder) => {
-    const folderButton = document.createElement("button");
-    folderButton.type = "button";
-    folderButton.textContent = folder.name;
-    folderButton.disabled = folder.name === task.folder_name;
-    folderButton.addEventListener("click", async () => {
+  const titleLabel = document.createElement("label");
+  titleLabel.textContent = "タスク名";
+  const titleInput = document.createElement("input");
+  titleInput.type = "text";
+  titleInput.value = task.title;
+  titleInput.required = true;
+  titleLabel.appendChild(titleInput);
+
+  const dueDateLabel = document.createElement("label");
+  dueDateLabel.textContent = "締切日";
+  const dueDateEditInput = document.createElement("input");
+  dueDateEditInput.type = "date";
+  dueDateEditInput.value = task.due_date ? task.due_date.slice(0, 10) : "";
+  dueDateLabel.appendChild(dueDateEditInput);
+
+  const estimateLabel = document.createElement("label");
+  estimateLabel.textContent = "予想所要時間（分）";
+  const estimateInput = document.createElement("input");
+  estimateInput.type = "number";
+  estimateInput.min = "1";
+  estimateInput.value = task.estimated_minutes || "";
+  estimateLabel.appendChild(estimateInput);
+
+  const tagLabel = document.createElement("label");
+  tagLabel.textContent = "タグ";
+  const tagInput = document.createElement("input");
+  tagInput.type = "text";
+  tagInput.value = task.tag_name || "";
+  tagInput.placeholder = "タグなし";
+  tagLabel.appendChild(tagInput);
+
+  const tagColorLabel = document.createElement("label");
+  tagColorLabel.textContent = "タグ色";
+  const tagColorEditInput = document.createElement("input");
+  tagColorEditInput.type = "color";
+  tagColorEditInput.value = task.tag_color || "#38bdf8";
+  tagColorLabel.appendChild(tagColorEditInput);
+
+  const folderLabel = document.createElement("label");
+  folderLabel.textContent = "フォルダの編入";
+  const folderSelect = document.createElement("select");
+  const folderNames = allFolders.map((folder) => folder.name);
+
+  if (!folderNames.includes(task.folder_name)) {
+    folderNames.push(task.folder_name || "tasks");
+  }
+
+  folderNames.forEach((folderName) => {
+    const option = document.createElement("option");
+    option.value = folderName;
+    option.textContent = folderName;
+    option.selected = folderName === task.folder_name;
+    folderSelect.appendChild(option);
+  });
+
+  folderLabel.appendChild(folderSelect);
+
+  const actions = document.createElement("div");
+  actions.className = "task-context-actions";
+
+  const saveButton = document.createElement("button");
+  saveButton.type = "submit";
+  saveButton.textContent = "保存";
+
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.className = "secondary-button";
+  cancelButton.textContent = "キャンセル";
+  cancelButton.addEventListener("click", closeTaskContextMenu);
+
+  actions.appendChild(saveButton);
+  actions.appendChild(cancelButton);
+
+  form.appendChild(titleLabel);
+  form.appendChild(dueDateLabel);
+  form.appendChild(estimateLabel);
+  form.appendChild(tagLabel);
+  form.appendChild(tagColorLabel);
+  form.appendChild(folderLabel);
+  form.appendChild(actions);
+
+  form.addEventListener("submit", async (submitEvent) => {
+    submitEvent.preventDefault();
+
+    saveButton.disabled = true;
+    showStatus("タスクを更新中...");
+
+    try {
       const response = await fetchWithTimeout(`/api/tasks/${task.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folder_name: folder.name }),
+        body: JSON.stringify({
+          title: titleInput.value,
+          due_date: dueDateEditInput.value,
+          estimated_minutes: estimateInput.value,
+          tag_name: tagInput.value,
+          tag_color: tagColorEditInput.value,
+          folder_name: folderSelect.value,
+        }),
       });
 
       if (!response.ok) {
@@ -604,14 +693,15 @@ function renderFolderMoveChoices(contextMenu, task, event) {
       }
 
       closeTaskContextMenu();
-      showStatus(`${task.title} を ${folder.name} フォルダへ移動しました。`);
+      showStatus("タスクを更新しました。");
+      await loadTags();
       await loadTasks();
-    });
-
-    folderChoiceList.appendChild(folderButton);
+    } finally {
+      saveButton.disabled = false;
+    }
   });
 
-  contextMenu.appendChild(folderChoiceList);
+  contextMenu.appendChild(form);
   positionContextMenu(contextMenu, event);
 }
 
@@ -622,15 +712,8 @@ function openTaskContextMenu(event, task) {
   const contextMenu = document.createElement("div");
   contextMenu.className = "task-context-menu";
 
-  const moveButton = document.createElement("button");
-  moveButton.type = "button";
-  moveButton.textContent = "フォルダの変更";
-  moveButton.addEventListener("click", () => {
-    renderFolderMoveChoices(contextMenu, task, event);
-  });
-
-  contextMenu.appendChild(moveButton);
   document.body.appendChild(contextMenu);
+  renderTaskEditForm(contextMenu, task, event);
   positionContextMenu(contextMenu, event);
 }
 
