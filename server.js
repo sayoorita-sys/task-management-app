@@ -249,6 +249,20 @@ app.delete("/api/reset-data", async (req, res) => {
 
   try {
     await client.query("BEGIN");
+    await client.query(
+      `DELETE FROM time_logs
+       WHERE task_id IN (
+         SELECT id FROM tasks WHERE user_id = $1
+       )`,
+      [req.user.id],
+    );
+    await client.query(
+      `DELETE FROM subtasks
+       WHERE task_id IN (
+         SELECT id FROM tasks WHERE user_id = $1
+       )`,
+      [req.user.id],
+    );
     await client.query("DELETE FROM tasks WHERE user_id = $1", [req.user.id]);
     await client.query("DELETE FROM tags WHERE user_id = $1", [req.user.id]);
     await client.query("DELETE FROM folders WHERE user_id = $1", [req.user.id]);
