@@ -52,6 +52,156 @@ function handleError(res, error, message) {
   res.status(500).json({ error: message, detail: error.message });
 }
 
+const recurrenceTypes = new Set(["none", "daily", "weekly", "biweekly", "monthly", "yearly", "custom"]);
+const recurrenceWeekdays = new Set(["0", "1", "2", "3", "4", "5", "6"]);
+
+function normalizeRecurrenceType(value) {
+  const recurrenceType = String(value || "none").trim();
+  return recurrenceTypes.has(recurrenceType) ? recurrenceType : "none";
+}
+
+function normalizeRecurrenceWeekdays(value) {
+  const values = Array.isArray(value)
+    ? value
+    : String(value || "").split(",");
+
+  return [...new Set(
+    values
+      .map((weekday) => String(weekday).trim())
+      .filter((weekday) => recurrenceWeekdays.has(weekday)),
+  )].sort((a, b) => Number(a) - Number(b)).join(",");
+}
+
+function normalizeRecurrenceCustomDates(value) {
+  const values = Array.isArray(value)
+    ? value
+    : String(value || "").split(",");
+
+  return [...new Set(
+    values
+      .map((dateText) => String(dateText).trim())
+      .filter((dateText) => /^\d{4}-\d{2}-\d{2}$/.test(dateText)),
+  )].sort().slice(0, 100).join(",");
+}
+
+function addRecurringDueDate(dueDate, recurrenceType, weekdays = "", customDates = "") {
+  if (!dueDate || recurrenceType === "none") {
+    return null;
+  }
+
+  const [year, month, day] = String(dueDate).slice(0, 10).split("-").map(Number);
+  const nextDate = new Date(Date.UTC(year, month - 1, day));
+  const dueDateText = String(dueDate).slice(0, 10);
+
+  if (recurrenceType === "daily") {
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+  }
+
+  if (recurrenceType === "weekly" || recurrenceType === "biweekly") {
+    const selectedWeekdays = normalizeRecurrenceWeekdays(weekdays)
+      .split(",")
+      .filter(Boolean)
+      .map(Number);
+    const maxDays = recurrenceType === "weekly" ? 7 : 14;
+
+    for (let offset = 1; offset <= maxDays; offset += 1) {
+      const candidate = new Date(Date.UTC(year, month - 1, day));
+      candidate.setUTCDate(candidate.getUTCDate() + offset);
+
+      if (selectedWeekdays.includes(candidate.getUTCDay())) {
+        return candidate.toISOString().slice(0, 10);
+      }
+    }
+
+    nextDate.setUTCDate(nextDate.getUTCDate() + maxDays);
+  }
+
+  if (recurrenceType === "monthly") {
+    const targetYear = month === 12 ? year + 1 : year;
+    const targetMonth = month === 12 ? 1 : month + 1;
+    const lastDay = new Date(Date.UTC(targetYear, targetMonth, 0)).getUTCDate();
+    return new Date(Date.UTC(targetYear, targetMonth - 1, Math.min(day, lastDay)))
+      .toISOString()
+      .slice(0, 10);
+  }
+
+  if (recurrenceType === "yearly") {
+    const targetYear = year + 1;
+    const lastDay = new Date(Date.UTC(targetYear, month, 0)).getUTCDate();
+    return new Date(Date.UTC(targetYear, month - 1, Math.min(day, lastDay)))
+      .toISOString()
+      .slice(0, 10);
+  }
+
+  if (recurrenceType === "custom") {
+    return normalizeRecurrenceCustomDates(customDates)
+      .split(",")
+      .find((dateText) => dateText > dueDateText) || null;
+  }
+
+  return nextDate.toISOString().slice(0, 10);
+}
+
+async function createNextRecurringTask(task, userId) {
+  const recurrenceType = normalizeRecurrenceType(task.recurrence_type);
+  const recurrenceWeekdaysValue = normalizeRecurrenceWeekdays(task.recurrence_weekdays);
+  const recurrenceCustomDatesValue = normalizeRecurrenceCustomDates(task.recurrence_custom_dates);
+  const nextDueDate = addRecurringDueDate(
+    task.due_date,
+    recurrenceType,
+    recurrenceWeekdaysValue,
+    recurrenceCustomDatesValue,
+  );
+
+  if (!nextDueDate) {
+    return null;
+  }
+
+  const result = await pool.query(
+    `INSERT INTO tasks (
+       title,
+       user_id,
+       due_date,
+       estimated_minutes,
+       tag_name,
+       tag_color,
+       folder_name,
+       custom_order,
+       recurrence_type,
+       recurrence_weekdays,
+       recurrence_custom_dates
+     )
+     VALUES (
+       $1,
+       $2,
+       $3,
+       $4,
+       $5,
+       $6,
+       $7,
+       COALESCE((SELECT MAX(custom_order) + 1 FROM tasks WHERE user_id = $2), 1),
+       $8,
+       $9,
+       $10
+     )
+     RETURNING *`,
+    [
+      task.title,
+      userId,
+      nextDueDate,
+      task.estimated_minutes,
+      task.tag_name,
+      task.tag_color,
+      task.folder_name || "tasks",
+      recurrenceType,
+      recurrenceWeekdaysValue,
+      recurrenceCustomDatesValue,
+    ],
+  );
+
+  return result.rows[0];
+}
+
 function parseCookies(cookieHeader = "") {
   return cookieHeader.split(";").reduce((cookies, cookie) => {
     const [rawName, ...rawValue] = cookie.trim().split("=");
@@ -319,6 +469,9 @@ async function setupDatabase() {
       folder_name TEXT DEFAULT 'tasks',
       custom_order INTEGER,
       manual_elapsed_seconds INTEGER DEFAULT 0,
+      recurrence_type TEXT DEFAULT 'none',
+      recurrence_weekdays TEXT DEFAULT '',
+      recurrence_custom_dates TEXT DEFAULT '',
       is_hidden BOOLEAN DEFAULT false,
       completed_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -334,6 +487,9 @@ async function setupDatabase() {
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS folder_name TEXT DEFAULT 'tasks'");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_order INTEGER");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS manual_elapsed_seconds INTEGER DEFAULT 0");
+  await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_type TEXT DEFAULT 'none'");
+  await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_weekdays TEXT DEFAULT ''");
+  await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_custom_dates TEXT DEFAULT ''");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT false");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
@@ -632,6 +788,66 @@ app.post("/api/tasks/:id/subtasks", async (req, res) => {
   }
 });
 
+app.delete("/api/tasks/:id", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const taskResult = await client.query(
+      "SELECT id FROM tasks WHERE id = $1 AND user_id = $2",
+      [req.params.id, req.user.id],
+    );
+
+    if (taskResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "タスクが見つかりませんでした。" });
+      return;
+    }
+
+    await client.query("DELETE FROM time_logs WHERE task_id = $1", [req.params.id]);
+    await client.query("DELETE FROM subtasks WHERE task_id = $1", [req.params.id]);
+    await client.query("DELETE FROM task_attachments WHERE task_id = $1", [req.params.id]);
+    await client.query("DELETE FROM tasks WHERE id = $1 AND user_id = $2", [
+      req.params.id,
+      req.user.id,
+    ]);
+
+    await client.query("COMMIT");
+    res.json({ ok: true });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    handleError(res, error, "タスクの削除に失敗しました。");
+  } finally {
+    client.release();
+  }
+});
+
+app.delete("/api/subtasks/:id", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `DELETE FROM subtasks
+       WHERE id = $1
+         AND EXISTS (
+           SELECT 1 FROM tasks
+           WHERE tasks.id = subtasks.task_id
+             AND tasks.user_id = $2
+         )
+       RETURNING *`,
+      [req.params.id, req.user.id],
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: "サブタスクが見つかりませんでした。" });
+      return;
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    handleError(res, error, "サブタスクの削除に失敗しました。");
+  }
+});
+
 app.post("/api/tasks/:id/attachments", async (req, res) => {
   try {
     const fileName = String(req.body.file_name || "").trim();
@@ -834,6 +1050,9 @@ app.patch("/api/tasks/:id", async (req, res) => {
       "tag_name",
       "tag_color",
       "folder_name",
+      "recurrence_type",
+      "recurrence_weekdays",
+      "recurrence_custom_dates",
       "total_elapsed_delta_minutes",
     ];
 
@@ -868,6 +1087,15 @@ app.patch("/api/tasks/:id", async (req, res) => {
         typeof req.body.folder_name === "string"
           ? req.body.folder_name.trim()
           : currentTask.folder_name || "tasks";
+      const recurrenceType = Object.prototype.hasOwnProperty.call(req.body, "recurrence_type")
+        ? normalizeRecurrenceType(req.body.recurrence_type)
+        : normalizeRecurrenceType(currentTask.recurrence_type);
+      let recurrenceWeekdaysValue = Object.prototype.hasOwnProperty.call(req.body, "recurrence_weekdays")
+        ? normalizeRecurrenceWeekdays(req.body.recurrence_weekdays)
+        : normalizeRecurrenceWeekdays(currentTask.recurrence_weekdays);
+      let recurrenceCustomDatesValue = Object.prototype.hasOwnProperty.call(req.body, "recurrence_custom_dates")
+        ? normalizeRecurrenceCustomDates(req.body.recurrence_custom_dates)
+        : normalizeRecurrenceCustomDates(currentTask.recurrence_custom_dates);
       let tagColor =
         typeof req.body.tag_color === "string" && req.body.tag_color
           ? req.body.tag_color
@@ -880,6 +1108,29 @@ app.patch("/api/tasks/:id", async (req, res) => {
 
       if (!title) {
         res.status(400).json({ error: "タスク名を入力してください。" });
+        return;
+      }
+
+      if (recurrenceType !== "none" && !dueDate) {
+        res.status(400).json({ error: "繰り返しを設定する場合は締切日を入力してください。" });
+        return;
+      }
+
+      if (recurrenceType !== "weekly" && recurrenceType !== "biweekly") {
+        recurrenceWeekdaysValue = "";
+      }
+
+      if (recurrenceType !== "custom") {
+        recurrenceCustomDatesValue = "";
+      }
+
+      if ((recurrenceType === "weekly" || recurrenceType === "biweekly") && !recurrenceWeekdaysValue) {
+        res.status(400).json({ error: "毎週または隔週の場合は、曜日を1つ以上選択してください。" });
+        return;
+      }
+
+      if (recurrenceType === "custom" && !recurrenceCustomDatesValue) {
+        res.status(400).json({ error: "カスタムの場合は、繰り返したい日を1つ以上選択してください。" });
         return;
       }
 
@@ -946,8 +1197,11 @@ app.patch("/api/tasks/:id", async (req, res) => {
              tag_name = $4,
              tag_color = $5,
              folder_name = $6,
-             manual_elapsed_seconds = $7
-         WHERE id = $8 AND user_id = $9
+             manual_elapsed_seconds = $7,
+             recurrence_type = $8,
+             recurrence_weekdays = $9,
+             recurrence_custom_dates = $10
+         WHERE id = $11 AND user_id = $12
          RETURNING *`,
         [
           title,
@@ -957,6 +1211,9 @@ app.patch("/api/tasks/:id", async (req, res) => {
           tagColor,
           folderName,
           manualElapsedSeconds,
+          recurrenceType,
+          recurrenceWeekdaysValue,
+          recurrenceCustomDatesValue,
           req.params.id,
           req.user.id,
         ],
@@ -970,6 +1227,11 @@ app.patch("/api/tasks/:id", async (req, res) => {
       res.json(result.rows[0]);
       return;
     }
+
+    const previousTaskResult = await pool.query(
+      "SELECT is_completed FROM tasks WHERE id = $1 AND user_id = $2",
+      [req.params.id, req.user.id],
+    );
 
     const result = await pool.query(
       `UPDATE tasks
@@ -986,7 +1248,19 @@ app.patch("/api/tasks/:id", async (req, res) => {
       return;
     }
 
-    res.json(result.rows[0]);
+    const updatedTask = result.rows[0];
+
+    if (
+      req.body.is_completed === true
+      && previousTaskResult.rows[0]
+      && previousTaskResult.rows[0].is_completed === false
+      && normalizeRecurrenceType(updatedTask.recurrence_type) !== "none"
+      && updatedTask.due_date
+    ) {
+      await createNextRecurringTask(updatedTask, req.user.id);
+    }
+
+    res.json(updatedTask);
   } catch (error) {
     handleError(res, error, "タスクの更新に失敗しました。");
   }

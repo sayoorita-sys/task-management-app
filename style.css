@@ -357,6 +357,70 @@ form {
   overflow-wrap: anywhere;
 }
 
+.recurrence-weekday-area,
+.recurrence-custom-area {
+  display: grid;
+  gap: 8px;
+}
+
+.recurrence-weekday-buttons {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.recurrence-weekday-buttons button,
+.recurrence-date-button {
+  min-width: 0;
+  padding: 8px 0;
+}
+
+.recurrence-weekday-buttons button.active,
+.recurrence-date-button.selected {
+  background: var(--theme-button-bg);
+  border-color: var(--theme-button-border);
+  color: var(--theme-button-text);
+}
+
+.recurrence-calendar-header {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.recurrence-calendar-header strong {
+  text-align: center;
+}
+
+.recurrence-calendar-header button {
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.recurrence-date-calendar {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.recurrence-calendar-weekday {
+  color: #78909c;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.recurrence-date-button {
+  background: white;
+  color: #46606f;
+  min-height: 34px;
+}
+
+.recurrence-date-button.outside-month {
+  color: #b9c8d2;
+}
+
 .task-context-actions {
   display: grid;
   gap: 8px;
@@ -374,6 +438,17 @@ form {
   padding-right: 8px;
   width: 100%;
   white-space: normal;
+}
+
+.context-danger-button {
+  background: #f43f5e;
+  border-color: #f43f5e;
+  color: white;
+}
+
+.subtask-context-menu {
+  min-width: min(240px, calc(100vw - 16px));
+  width: min(300px, calc(100vw - 16px));
 }
 
 .hidden-tag-section {
@@ -496,6 +571,17 @@ form {
   border: 1px solid #f59e0b;
   border-radius: 999px;
   color: #92400e;
+  display: inline-flex;
+  font-size: 0.78rem;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.recurrence-badge {
+  background: #eef6ff;
+  border: 1px solid var(--theme-border);
+  border-radius: 999px;
+  color: var(--theme-dark);
   display: inline-flex;
   font-size: 0.78rem;
   padding: 3px 8px;

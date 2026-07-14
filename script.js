@@ -82,6 +82,30 @@ const taskSortLabels = {
   custom: "カスタム",
 };
 
+const recurrenceLabels = {
+  none: "繰り返しなし",
+  weekly: "毎週",
+  biweekly: "隔週",
+  monthly: "毎月",
+  yearly: "毎年",
+  custom: "カスタム",
+};
+
+const recurrenceDisplayLabels = {
+  ...recurrenceLabels,
+  daily: "毎日",
+};
+
+const recurrenceWeekdayOptions = [
+  { value: "1", label: "月" },
+  { value: "2", label: "火" },
+  { value: "3", label: "水" },
+  { value: "4", label: "木" },
+  { value: "5", label: "金" },
+  { value: "6", label: "土" },
+  { value: "0", label: "日" },
+];
+
 let allTasks = [];
 let allTags = [];
 let allFolders = [];
@@ -243,6 +267,17 @@ function formatDueDate(dateText) {
   return `${Number(month)}/${Number(day)}`;
 }
 
+function getRecurrenceLabel(recurrenceType) {
+  return recurrenceDisplayLabels[recurrenceType] || recurrenceLabels.none;
+}
+
+function parseCommaValues(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function toDateTimeLocalValue(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -283,6 +318,9 @@ function createGoogleCalendarUrl(task, startValue) {
     task.due_date ? `締切: ${task.due_date.slice(0, 10)}` : "",
     task.tag_name ? `タグ: ${task.tag_name}` : "",
     task.folder_name ? `フォルダ: ${task.folder_name}` : "",
+    task.recurrence_type && task.recurrence_type !== "none"
+      ? `繰り返し: ${getRecurrenceLabel(task.recurrence_type)}`
+      : "",
   ].filter(Boolean).join("\n");
   const params = new URLSearchParams({
     action: "TEMPLATE",
@@ -659,6 +697,7 @@ function renderTaskFieldEditor(contextMenu, task, event, fieldName) {
     estimated_minutes: "予想所要時間",
     tag: "タグ",
     folder_name: "フォルダ",
+    recurrence_type: "繰り返し",
     total_elapsed_delta_minutes: "総作業時間",
   };
 
@@ -736,6 +775,169 @@ function renderTaskFieldEditor(contextMenu, task, event, fieldName) {
     getChanges = () => ({ folder_name: folderSelect.value });
   }
 
+  if (fieldName === "recurrence_type") {
+    let customCalendarDate = task.due_date
+      ? new Date(`${task.due_date.slice(0, 10)}T00:00:00`)
+      : new Date();
+    const selectedWeekdays = new Set(parseCommaValues(task.recurrence_weekdays));
+    const selectedCustomDates = new Set(parseCommaValues(task.recurrence_custom_dates));
+
+    const recurrenceSelect = document.createElement("select");
+
+    Object.entries(recurrenceLabels).forEach(([value, label]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      option.selected = value === (task.recurrence_type || "none");
+      recurrenceSelect.appendChild(option);
+    });
+
+    form.appendChild(createTaskContextInput("繰り返し", recurrenceSelect));
+
+    const weekdayArea = document.createElement("div");
+    weekdayArea.className = "recurrence-weekday-area";
+
+    const weekdayTitle = document.createElement("p");
+    weekdayTitle.className = "task-context-help";
+    weekdayTitle.textContent = "繰り返す曜日";
+    weekdayArea.appendChild(weekdayTitle);
+
+    const weekdayButtons = document.createElement("div");
+    weekdayButtons.className = "recurrence-weekday-buttons";
+
+    recurrenceWeekdayOptions.forEach((weekday) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = weekday.label;
+      button.classList.toggle("active", selectedWeekdays.has(weekday.value));
+      button.addEventListener("click", () => {
+        if (selectedWeekdays.has(weekday.value)) {
+          selectedWeekdays.delete(weekday.value);
+        } else {
+          selectedWeekdays.add(weekday.value);
+        }
+
+        button.classList.toggle("active", selectedWeekdays.has(weekday.value));
+      });
+
+      weekdayButtons.appendChild(button);
+    });
+
+    weekdayArea.appendChild(weekdayButtons);
+    form.appendChild(weekdayArea);
+
+    const customArea = document.createElement("div");
+    customArea.className = "recurrence-custom-area";
+
+    const customHeader = document.createElement("div");
+    customHeader.className = "recurrence-calendar-header";
+
+    const previousMonthButton = document.createElement("button");
+    previousMonthButton.type = "button";
+    previousMonthButton.textContent = "前月";
+
+    const customMonthLabel = document.createElement("strong");
+
+    const nextMonthButton = document.createElement("button");
+    nextMonthButton.type = "button";
+    nextMonthButton.textContent = "次月";
+
+    customHeader.appendChild(previousMonthButton);
+    customHeader.appendChild(customMonthLabel);
+    customHeader.appendChild(nextMonthButton);
+
+    const customSelectedCount = document.createElement("p");
+    customSelectedCount.className = "task-context-help";
+
+    const customCalendar = document.createElement("div");
+    customCalendar.className = "recurrence-date-calendar";
+
+    function renderRecurrenceCustomCalendar() {
+      const year = customCalendarDate.getFullYear();
+      const month = customCalendarDate.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const calendarStart = addDays(firstDay, -firstDay.getDay());
+
+      customMonthLabel.textContent = `${year}年${month + 1}月`;
+      customSelectedCount.textContent = `選択中: ${selectedCustomDates.size}/100日`;
+      customCalendar.innerHTML = "";
+
+      ["日", "月", "火", "水", "木", "金", "土"].forEach((weekday) => {
+        const weekdayCell = document.createElement("span");
+        weekdayCell.className = "recurrence-calendar-weekday";
+        weekdayCell.textContent = weekday;
+        customCalendar.appendChild(weekdayCell);
+      });
+
+      for (let index = 0; index < 42; index += 1) {
+        const cellDate = addDays(calendarStart, index);
+        const dateKey = toDateInputValue(cellDate);
+        const dateButton = document.createElement("button");
+        dateButton.type = "button";
+        dateButton.textContent = cellDate.getDate();
+        dateButton.className = "recurrence-date-button";
+        dateButton.classList.toggle("outside-month", cellDate.getMonth() !== month);
+        dateButton.classList.toggle("selected", selectedCustomDates.has(dateKey));
+        dateButton.addEventListener("click", () => {
+          if (selectedCustomDates.has(dateKey)) {
+            selectedCustomDates.delete(dateKey);
+          } else {
+            if (selectedCustomDates.size >= 100) {
+              showError("カスタムで選べる日は100日までです。");
+              return;
+            }
+
+            selectedCustomDates.add(dateKey);
+          }
+
+          renderRecurrenceCustomCalendar();
+        });
+
+        customCalendar.appendChild(dateButton);
+      }
+    }
+
+    previousMonthButton.addEventListener("click", () => {
+      customCalendarDate = addMonths(customCalendarDate, -1);
+      renderRecurrenceCustomCalendar();
+    });
+
+    nextMonthButton.addEventListener("click", () => {
+      customCalendarDate = addMonths(customCalendarDate, 1);
+      renderRecurrenceCustomCalendar();
+    });
+
+    customArea.appendChild(customHeader);
+    customArea.appendChild(customSelectedCount);
+    customArea.appendChild(customCalendar);
+    form.appendChild(customArea);
+
+    const recurrenceHelp = document.createElement("p");
+    recurrenceHelp.className = "task-context-help";
+    recurrenceHelp.textContent = "繰り返しには締切日が必要です。完了すると次回分が自動で作成されます。";
+    form.appendChild(recurrenceHelp);
+
+    function updateRecurrenceControls() {
+      const isWeekBased = recurrenceSelect.value === "weekly" || recurrenceSelect.value === "biweekly";
+      const isCustom = recurrenceSelect.value === "custom";
+      weekdayArea.classList.toggle("hidden", !isWeekBased);
+      customArea.classList.toggle("hidden", !isCustom);
+
+      if (isCustom) {
+        renderRecurrenceCustomCalendar();
+      }
+    }
+
+    recurrenceSelect.addEventListener("change", updateRecurrenceControls);
+    updateRecurrenceControls();
+
+    getChanges = () => ({
+      recurrence_type: recurrenceSelect.value,
+      recurrence_weekdays: [...selectedWeekdays].sort((a, b) => Number(a) - Number(b)).join(","),
+      recurrence_custom_dates: [...selectedCustomDates].sort().join(","),
+    });
+  }
+
   if (fieldName === "total_elapsed_delta_minutes") {
     const totalTimeInput = document.createElement("input");
     totalTimeInput.type = "number";
@@ -804,6 +1006,7 @@ function renderTaskEditMenu(contextMenu, task, event) {
     ["estimated_minutes", "予想所要時間"],
     ["tag", "タグ"],
     ["folder_name", "フォルダ"],
+    ["recurrence_type", "繰り返し"],
     ["total_elapsed_delta_minutes", "総作業時間"],
   ].forEach(([fieldName, label]) => {
     const button = document.createElement("button");
@@ -815,6 +1018,37 @@ function renderTaskEditMenu(contextMenu, task, event) {
 
     choiceList.appendChild(button);
   });
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "context-danger-button";
+  deleteButton.textContent = "タスクを削除";
+  deleteButton.addEventListener("click", async () => {
+    if (!window.confirm(`「${task.title}」を削除しますか？作業ログや添付ファイルも削除されます。`)) {
+      return;
+    }
+
+    const response = await fetchWithTimeout(`/api/tasks/${task.id}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      showError(await readError(response));
+      return;
+    }
+
+    closeTaskContextMenu();
+
+    if (expandedTaskId === task.id) {
+      expandedTaskId = null;
+    }
+
+    showStatus("タスクを削除しました。");
+    await loadTasks();
+    await loadWorkTimeChart();
+  });
+
+  choiceList.appendChild(deleteButton);
 
   contextMenu.appendChild(choiceList);
   positionContextMenu(contextMenu, event);
@@ -868,6 +1102,11 @@ function createSubtaskArea(task) {
 
     label.appendChild(checkbox);
     label.appendChild(text);
+    label.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openSubtaskContextMenu(event, subtask);
+    });
     subtaskArea.appendChild(label);
   });
 
@@ -910,6 +1149,49 @@ function createSubtaskArea(task) {
   subtaskArea.appendChild(form);
   subtaskArea.appendChild(createAttachmentArea(task));
   return subtaskArea;
+}
+
+function openSubtaskContextMenu(event, subtask) {
+  closeTagContextMenu();
+  closeTaskContextMenu();
+
+  const contextMenu = document.createElement("div");
+  contextMenu.className = "task-context-menu subtask-context-menu";
+  contextMenu.addEventListener("click", (clickEvent) => {
+    clickEvent.stopPropagation();
+  });
+
+  const heading = document.createElement("strong");
+  heading.textContent = "サブタスク操作";
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "context-danger-button";
+  deleteButton.textContent = "サブタスクを削除";
+  deleteButton.addEventListener("click", async () => {
+    if (!window.confirm(`「${subtask.title}」を削除しますか？`)) {
+      return;
+    }
+
+    const response = await fetchWithTimeout(`/api/subtasks/${subtask.id}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      showError(await readError(response));
+      return;
+    }
+
+    closeTaskContextMenu();
+    showStatus("サブタスクを削除しました。");
+    await loadTasks();
+    await loadWorkTimeChart();
+  });
+
+  contextMenu.appendChild(heading);
+  contextMenu.appendChild(deleteButton);
+  document.body.appendChild(contextMenu);
+  positionContextMenu(contextMenu, event);
 }
 
 function createAttachmentArea(task) {
@@ -1150,6 +1432,13 @@ function createTaskCard(task, customSortContext = null) {
     subtaskBadge.className = "subtask-count-badge";
     subtaskBadge.textContent = `未完了サブタスク${remainingSubtaskCount}個`;
     metaRow.appendChild(subtaskBadge);
+  }
+
+  if (task.recurrence_type && task.recurrence_type !== "none") {
+    const recurrenceBadge = document.createElement("span");
+    recurrenceBadge.className = "recurrence-badge";
+    recurrenceBadge.textContent = getRecurrenceLabel(task.recurrence_type);
+    metaRow.appendChild(recurrenceBadge);
   }
 
   if (metaRow.children.length > 0) {
