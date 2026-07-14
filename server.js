@@ -754,7 +754,7 @@ app.patch("/api/subtasks/:id", async (req, res) => {
     const statusResult = await pool.query(
       `SELECT
          COUNT(*)::int AS total_count,
-         COUNT(*) FILTER (WHERE is_completed = true)::int AS completed_count
+         COUNT(*) FILTER (WHERE subtasks.is_completed = true)::int AS completed_count
        FROM subtasks
        JOIN tasks ON tasks.id = subtasks.task_id
        WHERE subtasks.task_id = $1 AND tasks.user_id = $2`,
@@ -768,8 +768,14 @@ app.patch("/api/subtasks/:id", async (req, res) => {
         `UPDATE time_logs
          SET ended_at = CURRENT_TIMESTAMP,
              duration_minutes = ROUND((EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at)) / 60)::numeric, 2)
-         WHERE task_id = $1 AND ended_at IS NULL`,
-        [subtask.task_id],
+         WHERE task_id = $1
+           AND ended_at IS NULL
+           AND EXISTS (
+             SELECT 1 FROM tasks
+             WHERE tasks.id = time_logs.task_id
+               AND tasks.user_id = $2
+           )`,
+        [subtask.task_id, req.user.id],
       );
 
       await pool.query(
@@ -777,8 +783,8 @@ app.patch("/api/subtasks/:id", async (req, res) => {
          SET is_completed = true,
              is_hidden = false,
              completed_at = CURRENT_TIMESTAMP
-         WHERE id = $1`,
-        [subtask.task_id],
+         WHERE id = $1 AND user_id = $2`,
+        [subtask.task_id, req.user.id],
       );
     }
 
