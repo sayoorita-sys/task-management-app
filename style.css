@@ -347,6 +347,12 @@ form {
   padding: 4px;
 }
 
+.task-context-help {
+  color: #78909c;
+  font-size: 0.82rem;
+  margin: -2px 0 0;
+}
+
 .task-context-actions {
   display: grid;
   gap: 8px;

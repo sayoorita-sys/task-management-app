@@ -318,6 +318,7 @@ async function setupDatabase() {
       tag_color TEXT DEFAULT '#38bdf8',
       folder_name TEXT DEFAULT 'tasks',
       custom_order INTEGER,
+      manual_elapsed_seconds INTEGER DEFAULT 0,
       is_hidden BOOLEAN DEFAULT false,
       completed_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -332,6 +333,7 @@ async function setupDatabase() {
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS tag_color TEXT DEFAULT '#38bdf8'");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS folder_name TEXT DEFAULT 'tasks'");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_order INTEGER");
+  await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS manual_elapsed_seconds INTEGER DEFAULT 0");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT false");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
@@ -428,7 +430,7 @@ app.get("/api/tasks", async (req, res) => {
           SELECT FLOOR(SUM(EXTRACT(EPOCH FROM (COALESCE(ended_at, CURRENT_TIMESTAMP) - started_at))))
           FROM time_logs
           WHERE time_logs.task_id = tasks.id
-        ), 0) AS total_elapsed_seconds
+        ), 0) + COALESCE(tasks.manual_elapsed_seconds, 0) AS total_elapsed_seconds
       FROM tasks
       WHERE tasks.user_id = $1
       ORDER BY is_completed ASC, id ASC
@@ -826,6 +828,7 @@ app.patch("/api/tasks/:id", async (req, res) => {
       "tag_name",
       "tag_color",
       "folder_name",
+      "total_elapsed_delta_minutes",
     ];
 
     if (taskDetailFields.some((field) => Object.prototype.hasOwnProperty.call(req.body, field))) {
@@ -840,6 +843,7 @@ app.patch("/api/tasks/:id", async (req, res) => {
       }
 
       const currentTask = currentTaskResult.rows[0];
+      let manualElapsedSeconds = currentTask.manual_elapsed_seconds || 0;
       const title =
         typeof req.body.title === "string" ? req.body.title.trim() : currentTask.title;
       const dueDate =
@@ -896,6 +900,38 @@ app.patch("/api/tasks/:id", async (req, res) => {
         tagColor = tagResult.rows[0].color;
       }
 
+      if (Object.prototype.hasOwnProperty.call(req.body, "total_elapsed_delta_minutes")) {
+        const deltaMinutes = Number(req.body.total_elapsed_delta_minutes);
+
+        if (!Number.isFinite(deltaMinutes)) {
+          res.status(400).json({ error: "増減する作業時間を分で入力してください。" });
+          return;
+        }
+
+        const loggedTimeResult = await pool.query(
+          `SELECT COALESCE(
+             FLOOR(SUM(EXTRACT(EPOCH FROM (COALESCE(ended_at, CURRENT_TIMESTAMP) - started_at)))),
+             0
+           )::int AS logged_seconds
+           FROM time_logs
+           WHERE task_id = $1
+             AND EXISTS (
+               SELECT 1 FROM tasks
+               WHERE tasks.id = time_logs.task_id
+                 AND tasks.user_id = $2
+             )`,
+          [req.params.id, req.user.id],
+        );
+
+        const loggedSeconds = Number(loggedTimeResult.rows[0].logged_seconds || 0);
+        manualElapsedSeconds += Math.round(deltaMinutes * 60);
+
+        if (loggedSeconds + manualElapsedSeconds < 0) {
+          res.status(400).json({ error: "総作業時間は0分未満にできません。" });
+          return;
+        }
+      }
+
       const result = await pool.query(
         `UPDATE tasks
          SET title = $1,
@@ -903,8 +939,9 @@ app.patch("/api/tasks/:id", async (req, res) => {
              estimated_minutes = $3,
              tag_name = $4,
              tag_color = $5,
-             folder_name = $6
-         WHERE id = $7 AND user_id = $8
+             folder_name = $6,
+             manual_elapsed_seconds = $7
+         WHERE id = $8 AND user_id = $9
          RETURNING *`,
         [
           title,
@@ -913,6 +950,7 @@ app.patch("/api/tasks/:id", async (req, res) => {
           tagName || null,
           tagColor,
           folderName,
+          manualElapsedSeconds,
           req.params.id,
           req.user.id,
         ],

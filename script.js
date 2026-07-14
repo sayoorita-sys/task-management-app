@@ -202,6 +202,22 @@ function formatMinuteSecond(elapsedSeconds) {
   return `${minutes}:${seconds}`;
 }
 
+function formatWorkMinutes(totalMinutes) {
+  const minutes = Math.max(0, Math.round(Number(totalMinutes) || 0));
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (hours === 0) {
+    return `${remainingMinutes}分`;
+  }
+
+  if (remainingMinutes === 0) {
+    return `${hours}時間`;
+  }
+
+  return `${hours}時間${remainingMinutes}分`;
+}
+
 function toDateInputValue(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -643,6 +659,7 @@ function renderTaskFieldEditor(contextMenu, task, event, fieldName) {
     estimated_minutes: "予想所要時間",
     tag: "タグ",
     folder_name: "フォルダ",
+    total_elapsed_delta_minutes: "総作業時間",
   };
 
   heading.textContent = `${fieldLabels[fieldName]}を変更`;
@@ -719,6 +736,23 @@ function renderTaskFieldEditor(contextMenu, task, event, fieldName) {
     getChanges = () => ({ folder_name: folderSelect.value });
   }
 
+  if (fieldName === "total_elapsed_delta_minutes") {
+    const totalTimeInput = document.createElement("input");
+    totalTimeInput.type = "number";
+    totalTimeInput.step = "1";
+    totalTimeInput.placeholder = "例: 12 または -20";
+    form.appendChild(createTaskContextInput("増減する時間（分）", totalTimeInput));
+
+    const currentTimeText = document.createElement("p");
+    currentTimeText.className = "task-context-help";
+    currentTimeText.textContent = `現在の総作業時間: ${formatWorkMinutes(
+      Number(task.total_elapsed_seconds || 0) / 60,
+    )}`;
+    form.appendChild(currentTimeText);
+
+    getChanges = () => ({ total_elapsed_delta_minutes: totalTimeInput.value });
+  }
+
   const actions = document.createElement("div");
   actions.className = "task-context-actions";
 
@@ -770,6 +804,7 @@ function renderTaskEditMenu(contextMenu, task, event) {
     ["estimated_minutes", "予想所要時間"],
     ["tag", "タグ"],
     ["folder_name", "フォルダ"],
+    ["total_elapsed_delta_minutes", "総作業時間"],
   ].forEach(([fieldName, label]) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -1757,6 +1792,7 @@ async function loadWorkTimeChart() {
   const labels = reports.map((report) => report.work_date);
   const data = reports.map((report) => Number(report.total_minutes));
   const maxMinutes = data.length > 0 ? Math.max(...data) : 0;
+  const yAxisMaxMinutes = Math.max(60, Math.ceil((maxMinutes + 60) / 60) * 60);
 
   reportRangeLabel.textContent = toDateInputValue(currentReportDate);
 
@@ -1770,7 +1806,7 @@ async function loadWorkTimeChart() {
       labels,
       datasets: [
         {
-          label: "作業時間（分）",
+          label: "作業時間",
           data,
           backgroundColor: getComputedStyle(document.documentElement)
             .getPropertyValue("--theme-color")
@@ -1782,7 +1818,18 @@ async function loadWorkTimeChart() {
       scales: {
         y: {
           beginAtZero: true,
-          max: maxMinutes + 60,
+          max: yAxisMaxMinutes,
+          ticks: {
+            stepSize: 60,
+            callback: (value) => formatWorkMinutes(value),
+          },
+        },
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: (context) => `作業時間: ${formatWorkMinutes(context.parsed.y)}`,
+          },
         },
       },
     },
