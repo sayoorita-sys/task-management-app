@@ -306,6 +306,10 @@ function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
   return `${salt}:${hash}`;
 }
 
+function createInternalEmail() {
+  return `user-${crypto.randomUUID()}@task.local`;
+}
+
 function verifyPassword(password, storedPassword) {
   const [salt, storedHash] = String(storedPassword || "").split(":");
 
@@ -395,11 +399,10 @@ app.get("/api/auth/me", requireAuth, async (req, res) => {
 
 app.post("/api/auth/register", async (req, res) => {
   const name = String(req.body.name || "").trim();
-  const email = String(req.body.email || "").trim().toLowerCase();
   const password = String(req.body.password || "");
 
-  if (!name || !email || password.length < 6) {
-    res.status(400).json({ error: "名前、メールアドレス、6文字以上のパスワードを入力してください。" });
+  if (!name || password.length < 6) {
+    res.status(400).json({ error: "ユーザー名と6文字以上のパスワードを入力してください。" });
     return;
   }
 
@@ -407,11 +410,22 @@ app.post("/api/auth/register", async (req, res) => {
 
   try {
     await client.query("BEGIN");
+    const existingUserResult = await client.query(
+      "SELECT 1 FROM users WHERE name = $1 LIMIT 1",
+      [name],
+    );
+
+    if (existingUserResult.rows.length > 0) {
+      await client.query("ROLLBACK");
+      res.status(400).json({ error: "このユーザー名はすでに登録されています。" });
+      return;
+    }
+
     const userResult = await client.query(
       `INSERT INTO users (name, email, password_hash)
        VALUES ($1, $2, $3)
        RETURNING id, name, email`,
-      [name, email, hashPassword(password)],
+      [name, createInternalEmail(), hashPassword(password)],
     );
     const user = userResult.rows[0];
 
@@ -430,7 +444,7 @@ app.post("/api/auth/register", async (req, res) => {
     await client.query("ROLLBACK");
 
     if (error.code === "23505") {
-      res.status(400).json({ error: "このメールアドレスはすでに登録されています。" });
+      res.status(400).json({ error: "このユーザー名はすでに登録されています。" });
       return;
     }
 
@@ -441,17 +455,17 @@ app.post("/api/auth/register", async (req, res) => {
 });
 
 app.post("/api/auth/login", async (req, res) => {
-  const email = String(req.body.email || "").trim().toLowerCase();
+  const name = String(req.body.name || "").trim();
   const password = String(req.body.password || "");
 
   try {
     const result = await pool.query(
-      "SELECT id, name, email, password_hash FROM users WHERE email = $1",
-      [email],
+      "SELECT id, name, email, password_hash FROM users WHERE name = $1 ORDER BY id ASC LIMIT 1",
+      [name],
     );
 
     if (result.rows.length === 0 || !verifyPassword(password, result.rows[0].password_hash)) {
-      res.status(400).json({ error: "メールアドレスまたはパスワードが違います。" });
+      res.status(400).json({ error: "ユーザー名またはパスワードが違います。" });
       return;
     }
 

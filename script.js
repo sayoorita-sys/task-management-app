@@ -2,11 +2,10 @@ const taskInput = document.getElementById("taskInput");
 const authPage = document.getElementById("authPage");
 const appLayout = document.getElementById("appLayout");
 const loginForm = document.getElementById("loginForm");
-const loginEmailInput = document.getElementById("loginEmailInput");
+const loginNameInput = document.getElementById("loginNameInput");
 const loginPasswordInput = document.getElementById("loginPasswordInput");
 const registerForm = document.getElementById("registerForm");
 const registerNameInput = document.getElementById("registerNameInput");
-const registerEmailInput = document.getElementById("registerEmailInput");
 const registerPasswordInput = document.getElementById("registerPasswordInput");
 const currentUserLabel = document.getElementById("currentUserLabel");
 const logoutButton = document.getElementById("logoutButton");
@@ -2357,7 +2356,7 @@ loginForm.addEventListener("submit", async (event) => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      email: loginEmailInput.value,
+      name: loginNameInput.value,
       password: loginPasswordInput.value,
     }),
   });
@@ -2382,7 +2381,6 @@ registerForm.addEventListener("submit", async (event) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: registerNameInput.value,
-      email: registerEmailInput.value,
       password: registerPasswordInput.value,
     }),
   });
