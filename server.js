@@ -55,6 +55,29 @@ function handleError(res, error, message) {
 const recurrenceTypes = new Set(["none", "daily", "weekly", "biweekly", "monthly", "yearly", "custom"]);
 const recurrenceWeekdays = new Set(["0", "1", "2", "3", "4", "5", "6"]);
 
+function getJapanDateText(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function toDateText(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  return String(value).slice(0, 10);
+}
+
 function normalizeRecurrenceType(value) {
   const recurrenceType = String(value || "none").trim();
   return recurrenceTypes.has(recurrenceType) ? recurrenceType : "none";
@@ -89,9 +112,9 @@ function addRecurringDueDate(dueDate, recurrenceType, weekdays = "", customDates
     return null;
   }
 
-  const [year, month, day] = String(dueDate).slice(0, 10).split("-").map(Number);
+  const dueDateText = toDateText(dueDate);
+  const [year, month, day] = dueDateText.split("-").map(Number);
   const nextDate = new Date(Date.UTC(year, month - 1, day));
-  const dueDateText = String(dueDate).slice(0, 10);
 
   if (recurrenceType === "daily") {
     nextDate.setUTCDate(nextDate.getUTCDate() + 1);
@@ -167,6 +190,7 @@ async function createNextRecurringTask(task, userId) {
        tag_color,
        folder_name,
        custom_order,
+       recurrence_group_id,
        recurrence_type,
        recurrence_weekdays,
        recurrence_custom_dates
@@ -182,8 +206,10 @@ async function createNextRecurringTask(task, userId) {
        COALESCE((SELECT MAX(custom_order) + 1 FROM tasks WHERE user_id = $2), 1),
        $8,
        $9,
-       $10
+       $10,
+       $11
      )
+     ON CONFLICT DO NOTHING
      RETURNING *`,
     [
       task.title,
@@ -193,6 +219,7 @@ async function createNextRecurringTask(task, userId) {
       task.tag_name,
       task.tag_color,
       task.folder_name || "tasks",
+      task.recurrence_group_id || task.id,
       recurrenceType,
       recurrenceWeekdaysValue,
       recurrenceCustomDatesValue,
@@ -200,6 +227,65 @@ async function createNextRecurringTask(task, userId) {
   );
 
   return result.rows[0];
+}
+
+async function ensureRecurringTasks(userId) {
+  const today = getJapanDateText();
+  const recurringResult = await pool.query(
+    `SELECT DISTINCT ON (COALESCE(recurrence_group_id, id)) *
+     FROM tasks
+     WHERE user_id = $1
+       AND due_date IS NOT NULL
+       AND recurrence_type <> 'none'
+       AND due_date <= $2
+     ORDER BY COALESCE(recurrence_group_id, id), due_date ASC, id ASC`,
+    [userId, today],
+  );
+
+  for (const seedTask of recurringResult.rows) {
+    let currentTask = seedTask;
+
+    for (let count = 0; count < 120; count += 1) {
+      const nextDueDate = addRecurringDueDate(
+        currentTask.due_date,
+        currentTask.recurrence_type,
+        currentTask.recurrence_weekdays,
+        currentTask.recurrence_custom_dates,
+      );
+
+      if (!nextDueDate) {
+        break;
+      }
+
+      const groupId = currentTask.recurrence_group_id || currentTask.id;
+      const existsResult = await pool.query(
+        `SELECT *
+         FROM tasks
+         WHERE user_id = $1
+           AND recurrence_group_id = $2
+           AND due_date = $3
+         ORDER BY id ASC
+         LIMIT 1`,
+        [userId, groupId, nextDueDate],
+      );
+
+      if (existsResult.rows.length > 0) {
+        currentTask = existsResult.rows[0];
+
+        if (toDateText(currentTask.due_date) > today) {
+          break;
+        }
+
+        continue;
+      }
+
+      currentTask = await createNextRecurringTask({ ...currentTask, recurrence_group_id: groupId }, userId);
+
+      if (!currentTask || nextDueDate > today) {
+        break;
+      }
+    }
+  }
 }
 
 function parseCookies(cookieHeader = "") {
@@ -469,6 +555,7 @@ async function setupDatabase() {
       folder_name TEXT DEFAULT 'tasks',
       custom_order INTEGER,
       manual_elapsed_seconds INTEGER DEFAULT 0,
+      recurrence_group_id INTEGER,
       recurrence_type TEXT DEFAULT 'none',
       recurrence_weekdays TEXT DEFAULT '',
       recurrence_custom_dates TEXT DEFAULT '',
@@ -487,6 +574,7 @@ async function setupDatabase() {
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS folder_name TEXT DEFAULT 'tasks'");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_order INTEGER");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS manual_elapsed_seconds INTEGER DEFAULT 0");
+  await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_group_id INTEGER");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_type TEXT DEFAULT 'none'");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_weekdays TEXT DEFAULT ''");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_custom_dates TEXT DEFAULT ''");
@@ -494,6 +582,8 @@ async function setupDatabase() {
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP");
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
   await pool.query("UPDATE tasks SET custom_order = id WHERE custom_order IS NULL");
+  await pool.query("UPDATE tasks SET recurrence_group_id = id WHERE recurrence_group_id IS NULL");
+  await pool.query("CREATE INDEX IF NOT EXISTS tasks_user_recurrence_due_idx ON tasks (user_id, recurrence_group_id, due_date)");
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tags (
@@ -557,6 +647,8 @@ async function setupDatabase() {
 
 app.get("/api/tasks", async (req, res) => {
   try {
+    await ensureRecurringTasks(req.user.id);
+
     const result = await pool.query(`
       SELECT
         tasks.*,
@@ -1068,6 +1160,12 @@ app.patch("/api/tasks/:id", async (req, res) => {
       }
 
       const currentTask = currentTaskResult.rows[0];
+      const recurrenceGroupId = currentTask.recurrence_group_id || currentTask.id;
+      const isRecurrenceEdit = [
+        "recurrence_type",
+        "recurrence_weekdays",
+        "recurrence_custom_dates",
+      ].some((field) => Object.prototype.hasOwnProperty.call(req.body, field));
       let manualElapsedSeconds = currentTask.manual_elapsed_seconds || 0;
       const title =
         typeof req.body.title === "string" ? req.body.title.trim() : currentTask.title;
@@ -1198,10 +1296,11 @@ app.patch("/api/tasks/:id", async (req, res) => {
              tag_color = $5,
              folder_name = $6,
              manual_elapsed_seconds = $7,
-             recurrence_type = $8,
-             recurrence_weekdays = $9,
-             recurrence_custom_dates = $10
-         WHERE id = $11 AND user_id = $12
+             recurrence_group_id = $8,
+             recurrence_type = $9,
+             recurrence_weekdays = $10,
+             recurrence_custom_dates = $11
+         WHERE id = $12 AND user_id = $13
          RETURNING *`,
         [
           title,
@@ -1211,6 +1310,7 @@ app.patch("/api/tasks/:id", async (req, res) => {
           tagColor,
           folderName,
           manualElapsedSeconds,
+          recurrenceGroupId,
           recurrenceType,
           recurrenceWeekdaysValue,
           recurrenceCustomDatesValue,
@@ -1224,14 +1324,28 @@ app.patch("/api/tasks/:id", async (req, res) => {
         return;
       }
 
+      if (isRecurrenceEdit) {
+        await pool.query(
+          `UPDATE tasks
+           SET recurrence_group_id = $2,
+               recurrence_type = $3,
+               recurrence_weekdays = $4,
+               recurrence_custom_dates = $5
+           WHERE user_id = $1
+             AND (recurrence_group_id = $2 OR id = $2)`,
+          [
+            req.user.id,
+            recurrenceGroupId,
+            recurrenceType,
+            recurrenceWeekdaysValue,
+            recurrenceCustomDatesValue,
+          ],
+        );
+      }
+
       res.json(result.rows[0]);
       return;
     }
-
-    const previousTaskResult = await pool.query(
-      "SELECT is_completed FROM tasks WHERE id = $1 AND user_id = $2",
-      [req.params.id, req.user.id],
-    );
 
     const result = await pool.query(
       `UPDATE tasks
@@ -1248,19 +1362,7 @@ app.patch("/api/tasks/:id", async (req, res) => {
       return;
     }
 
-    const updatedTask = result.rows[0];
-
-    if (
-      req.body.is_completed === true
-      && previousTaskResult.rows[0]
-      && previousTaskResult.rows[0].is_completed === false
-      && normalizeRecurrenceType(updatedTask.recurrence_type) !== "none"
-      && updatedTask.due_date
-    ) {
-      await createNextRecurringTask(updatedTask, req.user.id);
-    }
-
-    res.json(updatedTask);
+    res.json(result.rows[0]);
   } catch (error) {
     handleError(res, error, "タスクの更新に失敗しました。");
   }

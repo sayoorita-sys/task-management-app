@@ -267,8 +267,56 @@ function formatDueDate(dateText) {
   return `${Number(month)}/${Number(day)}`;
 }
 
-function getRecurrenceLabel(recurrenceType) {
-  return recurrenceDisplayLabels[recurrenceType] || recurrenceLabels.none;
+function formatRecurrenceMonthDay(dateText) {
+  if (!dateText) {
+    return "";
+  }
+
+  const [, month, day] = dateText.slice(0, 10).split("-");
+  return `${Number(month)}/${Number(day)}`;
+}
+
+function getRecurrenceLabel(taskOrType) {
+  const task = typeof taskOrType === "object" && taskOrType !== null ? taskOrType : null;
+  const recurrenceType = task ? task.recurrence_type : taskOrType;
+  const baseLabel = recurrenceDisplayLabels[recurrenceType] || recurrenceLabels.none;
+
+  if (!task) {
+    return baseLabel;
+  }
+
+  if (recurrenceType === "weekly" || recurrenceType === "biweekly") {
+    const selectedWeekdays = parseCommaValues(task.recurrence_weekdays);
+    const weekdayLabels = recurrenceWeekdayOptions
+      .filter((weekday) => selectedWeekdays.includes(weekday.value))
+      .map((weekday) => weekday.label);
+
+    return weekdayLabels.length > 0
+      ? `${baseLabel}(${weekdayLabels.join("、")})`
+      : baseLabel;
+  }
+
+  if (recurrenceType === "monthly" && task.due_date) {
+    const [, , day] = task.due_date.slice(0, 10).split("-");
+    return `${baseLabel}(${Number(day)}日)`;
+  }
+
+  if (recurrenceType === "yearly" && task.due_date) {
+    return `${baseLabel}(${formatRecurrenceMonthDay(task.due_date)})`;
+  }
+
+  if (recurrenceType === "custom") {
+    const customDates = parseCommaValues(task.recurrence_custom_dates);
+    const customLabels = customDates.slice(0, 3).map(formatRecurrenceMonthDay);
+    const remainingCount = customDates.length - customLabels.length;
+    const suffix = remainingCount > 0 ? `、他${remainingCount}日` : "";
+
+    return customLabels.length > 0
+      ? `${baseLabel}(${customLabels.join("、")}${suffix})`
+      : baseLabel;
+  }
+
+  return baseLabel;
 }
 
 function parseCommaValues(value) {
@@ -319,7 +367,7 @@ function createGoogleCalendarUrl(task, startValue) {
     task.tag_name ? `タグ: ${task.tag_name}` : "",
     task.folder_name ? `フォルダ: ${task.folder_name}` : "",
     task.recurrence_type && task.recurrence_type !== "none"
-      ? `繰り返し: ${getRecurrenceLabel(task.recurrence_type)}`
+      ? `繰り返し: ${getRecurrenceLabel(task)}`
       : "",
   ].filter(Boolean).join("\n");
   const params = new URLSearchParams({
@@ -1437,7 +1485,7 @@ function createTaskCard(task, customSortContext = null) {
   if (task.recurrence_type && task.recurrence_type !== "none") {
     const recurrenceBadge = document.createElement("span");
     recurrenceBadge.className = "recurrence-badge";
-    recurrenceBadge.textContent = getRecurrenceLabel(task.recurrence_type);
+    recurrenceBadge.textContent = getRecurrenceLabel(task);
     metaRow.appendChild(recurrenceBadge);
   }
 
